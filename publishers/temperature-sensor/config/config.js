@@ -1,6 +1,5 @@
-/* module.exports = {
+module.exports = {
   brokerUrl: "mqtt://localhost:1883",
-  topic: "topic/test",
-  publishInterval: 1000,
+  topic: "house/12345/pantry/temperature",
+  publishInterval: 5000,
 };
- */

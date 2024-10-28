@@ -1,24 +1,26 @@
 const mqtt = require("mqtt");
-const config = require("../config/config"); // Importa as configurações do subscritor
+const config = require("../config/config");
 
 const client = mqtt.connect(config.brokerUrl);
 
 client.on("connect", () => {
-  console.log("Conectado ao broker");
+  console.log("Connected to the broker");
 
   client.subscribe(config.topic, (err) => {
     if (!err) {
-      console.log(`Inscrito no tópico: ${config.topic}`);
+      console.log(`Subscribed to the topic: ${config.topic}`);
     } else {
-      console.error("Erro ao inscrever-se no tópico:", err);
+      console.error("Error subscribing to the topic:", err);
     }
   });
 });
 
-client.on("message", (topic, message) => {
-  console.log(`Mensagem recebida no tópico ${topic}: ${message.toString()}`);
+client.on("message", (topic, temperature) => {
+  console.log(
+    `Message received on the topic ${topic}: ${temperature.toString()}`
+  );
 });
 
 client.on("close", () => {
-  console.log("Desconectado do broker");
+  console.log("Disconnected from the broker");
 });
