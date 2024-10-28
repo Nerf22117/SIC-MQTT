@@ -1,0 +1,15 @@
+{
+  "name": "sic-mqtt",
+  "version": "1.0.0",
+  "description": "Repository for the Project made in the scope of the Cloud Services and Interfaces - 3rd year of the Degree in Technologies and Information Systems for the Web (TSIW) \r (ESMAD-P.PORTO)",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "mqtt": "^5.10.1"
+  }
+}
