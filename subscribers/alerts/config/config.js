@@ -1,3 +1,5 @@
+// subscribers\alerts\config\config.js
+
 const commonConfig = require('../../../config/commonConfig');
 
 module.exports = {

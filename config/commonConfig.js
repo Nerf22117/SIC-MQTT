@@ -1,3 +1,5 @@
+// config\commonConfig.js
+
 module.exports = {
     brokerUrl: "mqtt://localhost:1883",
     houseUuids: ["12345"], // IDs das casas monitorizadas para alertas e dados de temperatura

@@ -18,7 +18,7 @@ client.on('connect', () => {
     // Subscrever aos tópicos de temperatura para cada house_uuid
     config.houseUuids.forEach(houseUuid => {
         const temperatureTopic = generateTopic(config.temperatureTopicPattern, houseUuid);
-        client.subscribe(temperatureTopic);
+        client.subscribe(temperatureTopic); // Subscreve para monitorizar temperaturas
         console.log(`Subscrito ao tópico de temperatura: ${temperatureTopic}`);
     });
 });
@@ -34,16 +34,24 @@ client.on('message', (topic, message) => {
     // Obter limites de temperatura
     const { min: minTemp, max: maxTemp } = getTemperatureThresholds(houseUuid);
 
-    // Publica um alerta sempre que a temperatura estiver fora dos limites
-    if (temperatura < minTemp || temperatura > maxTemp) {
-        const alertTopic = generateTopic(config.alertTopicPattern, houseUuid);
-        const alertMessage = {
-            alert: "high_temperature",
-            house_id: houseUuid,
-            temperature: temperatura,
-            timestamp: new Date().toISOString()
-        };
-        client.publish(alertTopic, JSON.stringify(alertMessage));
-        console.log(`ALERTA: Temperatura fora dos limites (${temperatura} °C) publicado no tópico ${alertTopic}`);
+    // Verificar se a temperatura está fora dos limites
+    if (temperatura < minTemp) {
+        publishTemperatureAlert("low_temperature", houseUuid, temperatura);
+    } else if (temperatura > maxTemp) {
+        publishTemperatureAlert("high_temperature", houseUuid, temperatura);
     }
 });
+
+// Função para publicar um alerta
+function publishTemperatureAlert(type, houseUuid, temperatura) {
+    const alertTopic = generateTopic(config.alertTopicPattern, houseUuid);
+    const alertMessage = {
+        alert: type,
+        house_id: houseUuid,
+        temperature: temperatura,
+        timestamp: new Date().toISOString()
+    };
+
+    client.publish(alertTopic, JSON.stringify(alertMessage));
+    console.log(`ALERTA (${type.toUpperCase()}): Temperatura fora dos limites (${temperatura} °C) publicado no tópico ${alertTopic}`);
+}
