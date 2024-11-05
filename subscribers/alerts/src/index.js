@@ -1,8 +1,9 @@
+// subscribers/alerts/src/index.js
 const mqtt = require('mqtt');
 const config = require('../config/config.js');
 const client = mqtt.connect(config.brokerUrl);
 
-// Função para gerar o tópico baseado no padrão, usando o house_uuid
+// Função para gerar o tópico baseado no padrão
 function generateTopic(pattern, houseUuid) {
     return pattern.replace("{house_uuid}", houseUuid);
 }
@@ -12,13 +13,20 @@ function getTemperatureThresholds(houseUuid) {
     return config.temperatureThresholds[houseUuid] || config.defaultAlertThresholds;
 }
 
+// Função para determinar o tipo de alerta baseado na temperatura
+function getAlertType(temperature, thresholds) {
+    if (temperature > thresholds.max) return "high_temperature";
+    if (temperature < thresholds.min) return "low_temperature";
+    return null;
+}
+
 client.on('connect', () => {
     console.log('Subscritor de Alertas Conectado ao Broker');
 
     // Subscrever aos tópicos de temperatura para cada house_uuid
     config.houseUuids.forEach(houseUuid => {
         const temperatureTopic = generateTopic(config.temperatureTopicPattern, houseUuid);
-        client.subscribe(temperatureTopic); // Subscreve para monitorizar temperaturas
+        client.subscribe(temperatureTopic);
         console.log(`Subscrito ao tópico de temperatura: ${temperatureTopic}`);
     });
 });
@@ -27,31 +35,26 @@ client.on('message', (topic, message) => {
     const parsedMessage = JSON.parse(message.toString());
     const temperatura = parseFloat(parsedMessage.temperature);
 
-    // Extraí o house_uuid do tópico
+    // Extrair o house_uuid do tópico
     const match = topic.match(/house\/([^/]+)\/temperature/);
     const houseUuid = match ? match[1] : null;
 
-    // Obter limites de temperatura
-    const { min: minTemp, max: maxTemp } = getTemperatureThresholds(houseUuid);
+    if (!houseUuid) return;
 
-    // Verificar se a temperatura está fora dos limites
-    if (temperatura < minTemp) {
-        publishTemperatureAlert("low_temperature", houseUuid, temperatura);
-    } else if (temperatura > maxTemp) {
-        publishTemperatureAlert("high_temperature", houseUuid, temperatura);
+    // Obter limites de temperatura
+    const thresholds = getTemperatureThresholds(houseUuid);
+    const alertType = getAlertType(temperatura, thresholds);
+
+    if (alertType) {
+        const alertTopic = generateTopic(config.alertTopicPattern, houseUuid);
+        const alertMessage = {
+            alert: alertType,
+            house_id: houseUuid,
+            temperature: temperatura,
+            threshold: alertType === "high_temperature" ? thresholds.max : thresholds.min,
+            timestamp: new Date().toISOString()
+        };
+        client.publish(alertTopic, JSON.stringify(alertMessage));
+        console.log(`ALERTA: ${alertType} (${temperatura} °C) publicado no tópico ${alertTopic}`);
     }
 });
-
-// Função para publicar um alerta
-function publishTemperatureAlert(type, houseUuid, temperatura) {
-    const alertTopic = generateTopic(config.alertTopicPattern, houseUuid);
-    const alertMessage = {
-        alert: type,
-        house_id: houseUuid,
-        temperature: temperatura,
-        timestamp: new Date().toISOString()
-    };
-
-    client.publish(alertTopic, JSON.stringify(alertMessage));
-    console.log(`ALERTA (${type.toUpperCase()}): Temperatura fora dos limites (${temperatura} °C) publicado no tópico ${alertTopic}`);
-}
