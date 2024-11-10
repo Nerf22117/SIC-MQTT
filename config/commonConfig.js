@@ -58,6 +58,36 @@ class CommonConfig {
                 shelves: [
                     { id: "A1", name: "Prateleira 1", maxWeight: 30000 },
                     { id: "A2", name: "Prateleira 2", maxWeight: 30000 }
+                ],
+                products: [
+                    {
+                        id: "P1",
+                        shelfId: "A1",
+                        name: "Arroz",
+                        rfid_tag: "1234567890",
+                        min_stock: 2000 // Dois quilos de arroz
+                    },
+                    {
+                        id: "P2",
+                        shelfId: "A1",
+                        name: "Feijão",
+                        rfid_tag: "0987654321",
+                        min_stock: 1000 // Um quilo de feijão
+                    },
+                    {
+                        id: "P3",
+                        shelfId: "A2",
+                        name: "Massa",
+                        rfid_tag: "1357924680",
+                        min_stock: 1500 // Um quilo e meio de macarrão
+                    },
+                    {
+                        id: "P4",
+                        shelfId: "A2",
+                        name: "Sal",
+                        rfid_tag: "2468013579",
+                        min_stock: 500 // Meio quilo de sal
+                    }
                 ]
             },
             "54321": {
