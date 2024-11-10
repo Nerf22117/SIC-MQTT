@@ -16,17 +16,16 @@ module.exports = {
         "12345": { min: 2.0, max: 18.0 },
         "67890": { min: 4.0, max: 20.0 }
     },
-    // Limite padrão para alertas de temperatura, caso não haja configurações específicas para a casa
-    defaultAlertThresholds: { min: 0.0, max: 22.0 },
+
     
-    // Configurações dos sensores de peso aplicáveis a todas as prateleiras
+/*     // Configurações dos sensores de peso aplicáveis a todas as prateleiras
     weightThresholds: {
         minWeightChange: 50,     // Mudança mínima detectável em gramas
         maxShelfWeight: 30000,   // Peso máximo por prateleira em gramas (30kg)
         stabilityTime: 2000,     // Tempo para considerar peso estável em ms
         noiseThreshold: 10       // Variação máxima considerada ruído (em gramas)
     },
-    
+     */
     // Organização de prateleiras por casa
     shelves: {
         "12345": [  // Configuração de prateleiras para a casa "12345"
@@ -39,7 +38,7 @@ module.exports = {
                 id: "A2",
                 name: "Prateleira 2",
                 maxWeight: 30000
-            }
+            },
         ],
         "67890": [  // Configuração de prateleiras para a casa "67890"
             {
@@ -53,7 +52,7 @@ module.exports = {
                 maxWeight: 25000
             }
         ]
-    }
+    },
 
     // Organização dos produtos por prateleira e respetivo stock
     stockItems: {
@@ -64,5 +63,19 @@ module.exports = {
             minStock: 2000,    // Alerta abaixo de 2kg
             rfidTag: "TAG001"  // Tag RFID associada
         },
-    }
+        "massa": {
+            id: "PROD002",
+            name: "Massa",
+            unitWeight: 500,   // 500g por unidade
+            minStock: 1000,
+            rfidTag: "TAG002"
+        },
+        "lentilhas": {
+            id: "PROD003",
+            name: "Lentilhas",
+            unitWeight: 500,
+            minStock: 1000,
+            rfidTag: "TAG003"
+        },
+    },
 };

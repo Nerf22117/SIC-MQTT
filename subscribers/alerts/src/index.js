@@ -1,4 +1,3 @@
-// subscribers/alerts/src/index.js
 const mqtt = require('mqtt');
 const config = require('../config/config.js');
 const client = mqtt.connect(config.brokerUrl);

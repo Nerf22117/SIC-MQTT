@@ -7,19 +7,6 @@ module.exports = {
     
     // Configurações de alertas por tipo de produto
     productAlerts: {
-        stockThresholds: {
-            // Configurações por tipo de produto
-            "arroz": {
-                unitWeight: 1000,    // 1kg por unidade
-                minStock: 2000,      // Alerta quando abaixo de 2kg
-                criticalStock: 1000  // Alerta crítico abaixo de 1kg
-            },
-            "massa": {
-                unitWeight: 500,     // 500g por pacote
-                minStock: 1500,      // Alerta abaixo de 1.5kg
-                criticalStock: 500   // Alerta crítico abaixo de 500g
-            }
-        },
         // Configuração padrão para produtos não especificados
         defaultThresholds: {
             minStockPercentage: 25,

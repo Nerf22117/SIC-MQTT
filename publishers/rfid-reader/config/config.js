@@ -14,18 +14,6 @@ module.exports = {
     // Simulação
     simulation: {
         enabled: true,
-        knownTags: {
-            "RFID001": {
-                id: "PROD001",
-                name: "Arroz",
-                weight: 1000
-            },
-            "RFID002": {
-                id: "PROD002",
-                name: "Massa",
-                weight: 500
-            }
-        },
         unknownTags: [
             "RFID999",  // Tag não registrada para simular produto novo
             "RFID888"
