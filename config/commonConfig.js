@@ -1,81 +1,98 @@
 // config/commonConfig.js
 
-module.exports = {
-    brokerUrl: "mqtt://localhost:1883",
-    houseUuids: ["12345", "67890"], // Exemplo com múltiplas casas
-    
-    // Padrões de tópicos, usando placeholders para personalização
-    temperatureTopicPattern: "house/{house_uuid}/temperature",
-    alertTopicPattern: "house/{house_uuid}/alerts",
-    weightTopicPattern: "house/{house_uuid}/pantry/{shelf_id}/weight",
-    rfidTopicPattern: "house/{house_uuid}/pantry/{shelf_id}/rfid",
-    actionTopicPattern: "house/{house_uuid}/pantry/{shelf_id}/action",
-    
-    // Configurações de temperatura específicas por casa
-    temperatureThresholds: {
-        "12345": { min: 2.0, max: 18.0 },
-        "67890": { min: 4.0, max: 20.0 }
-    },
+require('dotenv').config();
 
-    
-/*     // Configurações dos sensores de peso aplicáveis a todas as prateleiras
-    weightThresholds: {
-        minWeightChange: 50,     // Mudança mínima detectável em gramas
-        maxShelfWeight: 30000,   // Peso máximo por prateleira em gramas (30kg)
-        stabilityTime: 2000,     // Tempo para considerar peso estável em ms
-        noiseThreshold: 10       // Variação máxima considerada ruído (em gramas)
-    },
-     */
-    // Organização de prateleiras por casa
-    shelves: {
-        "12345": [  // Configuração de prateleiras para a casa "12345"
-            {
-                id: "A1",
-                name: "Prateleira 1",
-                maxWeight: 30000  // 30kg
-            },
-            {
-                id: "A2",
-                name: "Prateleira 2",
-                maxWeight: 30000
-            },
-        ],
-        "67890": [  // Configuração de prateleiras para a casa "67890"
-            {
-                id: "B1",
-                name: "Prateleira 1",
-                maxWeight: 20000  // 20kg, por exemplo
-            },
-            {
-                id: "B2",
-                name: "Prateleira 2",
-                maxWeight: 25000
-            }
-        ]
-    },
-
-    // Organização dos produtos por prateleira e respetivo stock
-    stockItems: {
-        "arroz": {
-            id: "PROD001",
-            name: "Arroz",
-            unitWeight: 1000,  // 1kg por unidade
-            minStock: 2000,    // Alerta abaixo de 2kg
-            rfidTag: "TAG001"  // Tag RFID associada
-        },
-        "massa": {
-            id: "PROD002",
-            name: "Massa",
-            unitWeight: 500,   // 500g por unidade
-            minStock: 1000,
-            rfidTag: "TAG002"
-        },
-        "lentilhas": {
-            id: "PROD003",
-            name: "Lentilhas",
-            unitWeight: 500,
-            minStock: 1000,
-            rfidTag: "TAG003"
-        },
-    },
+const MQTT_PROTOCOLS = {
+    MQTT: 'mqtt://',
+    MQTTS: 'mqtts://',
+    WS: 'ws://',
+    WSS: 'wss://'
 };
+
+const TOPIC_PATTERNS = {
+    TEMPERATURE: 'house/{house_uuid}/temperature',
+    ALERTS: 'house/{house_uuid}/alerts',
+    SHELF_WEIGHT: 'house/{house_uuid}/shelf/{shelf_id}/weight',
+    SHELF_PRODUCTS: 'house/{house_uuid}/shelf/{shelf_id}/products'
+};
+
+const MQTT_OPTIONS = {
+    clean: true,
+    connectTimeout: 4000,
+    reconnectPeriod: 1000,
+    qos: 1,
+    retain: false
+};
+
+class CommonConfig {
+    static get brokerConfig() {
+        return {
+            url: process.env.MQTT_BROKER_URL || 'mqtt://localhost:1883',
+            options: MQTT_OPTIONS
+        };
+    }
+
+    static get topicPatterns() {
+        return TOPIC_PATTERNS;
+    }
+
+    static formatTopic(pattern, params) {
+        let formattedTopic = pattern;
+        Object.entries(params).forEach(([key, value]) => {
+            formattedTopic = formattedTopic.replace(`{${key}}`, value);
+        });
+        return formattedTopic;
+    }
+
+    static get houseConfigs() {
+        return {
+            "12345": {
+                name: "Casa Principal",
+                temperature: {
+                    min: 14.0,
+                    max: 16.0,
+                    bufferZone: 0.5,         // Zona de buffer para alertas
+                    alertCooldown: 60000,    // 15 minutos em produção
+                    readingInterval: 5000    // 5 minutos em produção
+                },
+                shelves: [
+                    { id: "A1", name: "Prateleira 1", maxWeight: 30000 },
+                    { id: "A2", name: "Prateleira 2", maxWeight: 30000 }
+                ]
+            }
+            // Adicionar outras casas conforme necessário
+        };
+    }
+
+    static getHouseAlertThresholds(houseUuid) {
+        return this.houseConfigs[houseUuid]?.temperature || {
+            min: 2.0,
+            max: 18.0,
+            bufferZone: 1.0,
+            alertCooldown: 900000,
+            readingInterval: 300000
+        };
+    }
+
+    static get loggingConfig() {
+        return {
+            level: process.env.NODE_ENV === 'development' ? 'debug' : 'info',
+            temperatureLogInterval: 300000, // Log a cada 5 minutos
+            format: {
+                timestamp: true,
+                includeHouseId: true,
+                includeSensorId: true
+            }
+        };
+    }
+
+    static get environmentConfig() {
+        return {
+            isDevelopment: process.env.NODE_ENV !== 'production',
+            isProduction: process.env.NODE_ENV === 'production',
+            debugMode: process.env.DEBUG === 'true'
+        };
+    }
+}
+
+module.exports = CommonConfig;
