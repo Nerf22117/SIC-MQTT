@@ -51,13 +51,27 @@ class CommonConfig {
                 temperature: {
                     min: 14.0,
                     max: 16.0,
-                    bufferZone: 0.5,         // Zona de buffer para alertas
-                    alertCooldown: 60000,    // 15 minutos em produção
-                    readingInterval: 5000    // 5 minutos em produção
+                    bufferZone: 1.0,         // Zona de buffer para alertas
+                    alertCooldown: 900000,    // 15 minutos em produção
+                    readingInterval: 300000   // 5 minutos em produção
                 },
                 shelves: [
                     { id: "A1", name: "Prateleira 1", maxWeight: 30000 },
                     { id: "A2", name: "Prateleira 2", maxWeight: 30000 }
+                ]
+            },
+            "54321": {
+                name: "Casa de Campo",
+                temperature: {
+                    min: 10.0,
+                    max: 20.0,
+                    bufferZone: 1.0,
+                    alertCooldown: 900000,
+                    readingInterval: 300000
+                },
+                shelves: [
+                    { id: "A1", name: "Prateleira 1", maxWeight: 20000 },
+                    { id: "A2", name: "Prateleira 2", maxWeight: 20000 }
                 ]
             }
             // Adicionar outras casas conforme necessário

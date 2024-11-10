@@ -218,8 +218,8 @@ class AppSubscriber {
             const isNearMin = Math.abs(temperature - thresholds.min) <= thresholds.bufferZone;
             
             if (isNearMax || isNearMin) {
-                console.log(`⚠️  Atenção: Temperatura próxima dos limites (${thresholds.min}°C - ${thresholds.max}°C)`);
-                console.log(`Zona de buffer: ±${thresholds.bufferZone}°C`);
+                console.log(`[Casa ${houseUuid}] ⚠️  Atenção: Temperatura próxima dos limites (${thresholds.min}°C - ${thresholds.max}°C)`);
+                console.log(`[Casa ${houseUuid}] Zona de buffer: ±${thresholds.bufferZone}°C`);
             }
         }
     }
