@@ -26,7 +26,8 @@ class AlertSubscriber {
         this.topicHandlers = this.initializeTopicHandlers();
         
         if (Config.environmentConfig.isDevelopment) {
-            console.log('Padrões de tópicos carregados:', Config.TOPIC_PATTERNS);
+
+            console.log('Padrões de tópicos carregados:', Config.topicPatterns);
         }
     }
     
@@ -53,16 +54,17 @@ class AlertSubscriber {
         houses.forEach(houseUuid => {
             try {
                 console.log(`\nA configurar subscrições para Casa ${houseUuid}:`);
-                
+/*                 console.warn("Config.topicPatterns", Config.topicPatterns);
+                console.log('Configuração da casa:', Config.houseConfigs[houseUuid]); */
                 // Tópicos base
                 const topics = [
                     { 
                         type: 'temperatura', 
-                        topic: Config.formatTopic(Config.TOPIC_PATTERNS.TEMPERATURE, { house_uuid: houseUuid }) 
+                        topic: Config.formatTopic(Config.topicPatterns.TEMPERATURE, { house_uuid: houseUuid }) 
                     },
                     { 
                         type: 'alertas', 
-                        topic: Config.formatTopic(Config.TOPIC_PATTERNS.ALERTS, { house_uuid: houseUuid }) 
+                        topic: Config.formatTopic(Config.topicPatterns.ALERTS, { house_uuid: houseUuid }) 
                     }
                 ];
         
@@ -71,12 +73,12 @@ class AlertSubscriber {
                     topics.push(
                         { 
                             type: 'peso', 
-                            topic: Config.formatTopic(Config.TOPIC_PATTERNS.SHELF_WEIGHT, 
+                            topic: Config.formatTopic(Config.topicPatterns.SHELF_WEIGHT, 
                                 { house_uuid: houseUuid, shelf_id: shelf.id }) 
                         },
                         { 
                             type: 'produtos', 
-                            topic: Config.formatTopic(Config.TOPIC_PATTERNS.SHELF_PRODUCTS, 
+                            topic: Config.formatTopic(Config.topicPatterns.SHELF_PRODUCTS, 
                                 { house_uuid: houseUuid, shelf_id: shelf.id }) 
                         }
                     );
@@ -257,6 +259,8 @@ class AlertSubscriber {
         const topic = Config.formatTopic(Config.topicPatterns.ALERTS, {
             house_uuid: houseUuid
         });
+
+        console.warn("Config.topicPatterns.ALERTS", Config.topicPatterns.ALERTS);
         
         const formattedAlert = this.alertManager.formatAlertMessage(alert);
         

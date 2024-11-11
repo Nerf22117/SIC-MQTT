@@ -1,7 +1,7 @@
 // subscribers/app/config/appConfig.js
 
 const CommonConfig = require('../../../config/commonConfig');
-const ConfigValidator = require('../../../config/validators/configValidator');
+ const ConfigValidator = require('../../../config/validators/configValidator');
 const WeightSensorConfig = require('../../../publishers/weight-sensor/config/weightSensorConfig');
 
 /**

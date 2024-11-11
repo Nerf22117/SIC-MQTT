@@ -3,16 +3,13 @@
 const mqtt = require('mqtt');
 const Config = require('../config/temperatureSensorConfig');
 
-/**
- * Implementação do sensor de temperatura
- * Responsável por simular e publicar leituras de temperatura
- */
 class TemperatureSensor {
     /**
      * Inicializa o sensor de temperatura
      * @param {string} houseUuid - Identificador único da casa
+     * @param {Object} testConfig - Configuração opcional para testes
      */
-    constructor(houseUuid) {
+    constructor(houseUuid, testConfig = null) {
         this.houseUuid = houseUuid;
         this.client = null;
         this.lastTemperature = null;
@@ -24,27 +21,28 @@ class TemperatureSensor {
 
         // Carregar configurações
         this.sensorConfig = Config.sensorConfig;
-        this.houseConfig = Config.getHouseTemperatureConfig(houseUuid);
+        this.houseConfig = Config.getHouseTemperatureConfig(houseUuid, testConfig);
     }
 
+    
     /**
-     * Estabelece conexão com o broker MQTT
-     * @throws {Error} Se ocorrer erro na conexão
-     */
+    * Estabelece conexão com o broker MQTT
+    * @throws {Error} Se ocorrer erro na conexão
+    */
     async connect() {
         try {
             this.client = mqtt.connect(Config.brokerConfig.url, Config.brokerConfig.options);
-
+            
             this.client.on('connect', () => {
                 console.log(`Sensor de Temperatura conectado para casa ${this.houseUuid}`);
                 this.startPublishing();
             });
-
+            
             this.client.on('error', (error) => {
                 console.error(`Erro no sensor de temperatura: ${error.message}`);
                 this.cleanup();
             });
-
+            
             this.client.on('close', () => {
                 console.log('Conexão fechada. A tentar reconectar...');
                 this.cleanup();
@@ -54,20 +52,20 @@ class TemperatureSensor {
             throw error;
         }
     }
-
+    
     /**
-     * Define uma sequência de temperaturas para teste
-     * @param {number[]} temperatures - Temperaturas de teste
-     */
+    * Define uma sequência de temperaturas para teste
+    * @param {number[]} temperatures - Temperaturas de teste
+    */
     setTestTemperatures(temperatures) {
         this.testTemperatures = temperatures;
         this.testIndex = 0;
     }
-
+    
     /**
-     * Gera uma nova leitura de temperatura
-     * @returns {string} Temperatura gerada
-     */
+    * Gera uma nova leitura de temperatura
+    * @returns {string} Temperatura gerada
+    */
     generateTemperature() {
         // Usar temperaturas de teste se disponíveis
         if (this.testTemperatures !== null) {
@@ -76,11 +74,11 @@ class TemperatureSensor {
             this.lastTemperature = newTemp;
             return newTemp;
         }
-
+        
         // Gerar temperatura simulada
         const { min, max, variance } = this.sensorConfig.simulationConfig;
         let newTemp;
-
+        
         if (this.lastTemperature === null) {
             // Primeira leitura - começar com valor médio
             newTemp = ((max + min) / 2).toFixed(2);
@@ -89,7 +87,7 @@ class TemperatureSensor {
             const variation = (Math.random() * 2 - 1) * variance;
             newTemp = (parseFloat(this.lastTemperature) + variation).toFixed(2);
         }
-
+        
         // Validar a temperatura gerada
         const validation = Config.validationRules.temperature;
         const rangeCheck = validation.validateRange(parseFloat(newTemp));
@@ -97,7 +95,7 @@ class TemperatureSensor {
         if (!rangeCheck.isValid) {
             newTemp = rangeCheck.value.toFixed(2);
         }
-
+        
         // Validar taxa de mudança
         if (this.lastTemperature !== null && this.lastPublishTime !== null) {
             const timeDiff = Date.now() - this.lastPublishTime;
@@ -112,21 +110,21 @@ class TemperatureSensor {
                 this.isStabilizing = true;
             }
         }
-
+        
         this.lastTemperature = newTemp;
         return newTemp;
     }
-
+    
     /**
-     * Inicia a publicação de leituras de temperatura
-     */
+    * Inicia a publicação de leituras de temperatura
+    */
     startPublishing() {
         if (this.publishInterval) return;
-
+        
         const topic = Config.formatTopic(Config.topicPatterns.TEMPERATURE, {
             house_uuid: this.houseUuid
         });
-
+        
         this.publishInterval = setInterval(() => {
             const temperature = this.generateTemperature();
             const now = Date.now();
@@ -137,7 +135,7 @@ class TemperatureSensor {
                 sensor_id: `temp_${this.houseUuid}`,
                 status: this.isStabilizing ? 'stabilizing' : 'stable'
             };
-
+            
             this.client.publish(topic, JSON.stringify(message), { qos: 1 }, (err) => {
                 if (err) {
                     console.error(`Erro ao publicar temperatura: ${err.message}`);
@@ -145,36 +143,36 @@ class TemperatureSensor {
                     if (Config.environmentConfig.isDevelopment || 
                         !this.lastPublishTime || 
                         now - this.lastPublishTime >= Config.sensorConfig.publishInterval) {
-                        console.log(`Temperatura publicada: ${temperature}°C no tópico ${topic}`);
-                        this.lastPublishTime = now;
+                            console.log(`Temperatura publicada: ${temperature}°C no tópico ${topic}`);
+                            this.lastPublishTime = now;
+                        }
+                    }
+                });
+                
+                // Verificar se ainda está em período de estabilização
+                if (this.isStabilizing && 
+                    now - this.lastPublishTime >= this.sensorConfig.simulationConfig.stabilizationTime) {
+                        this.isStabilizing = false;
+                    }
+                }, this.sensorConfig.publishInterval);
+            }
+            
+            /**
+            * Limpa recursos e encerra conexões
+            */
+            cleanup() {
+                if (this.publishInterval) {
+                    clearInterval(this.publishInterval);
+                    this.publishInterval = null;
+                }
+                if (this.client) {
+                    try {
+                        this.client.end(true);
+                    } catch (error) {
+                        console.error(`Erro ao limpar recursos: ${error.message}`);
                     }
                 }
-            });
-
-            // Verificar se ainda está em período de estabilização
-            if (this.isStabilizing && 
-                now - this.lastPublishTime >= this.sensorConfig.simulationConfig.stabilizationTime) {
-                this.isStabilizing = false;
-            }
-        }, this.sensorConfig.publishInterval);
-    }
-
-    /**
-     * Limpa recursos e encerra conexões
-     */
-    cleanup() {
-        if (this.publishInterval) {
-            clearInterval(this.publishInterval);
-            this.publishInterval = null;
-        }
-        if (this.client) {
-            try {
-                this.client.end(true);
-            } catch (error) {
-                console.error(`Erro ao limpar recursos: ${error.message}`);
             }
         }
-    }
-}
-
-module.exports = TemperatureSensor;
+        
+        module.exports = TemperatureSensor;

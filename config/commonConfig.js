@@ -1,7 +1,5 @@
 // config/commonConfig.js
 
-const ConfigValidator = require('./validators/configValidator');
-
 /**
  * Configurações comuns do sistema StockWise
  * Fornece acesso a configurações base utilizadas por todos os componentes
@@ -9,7 +7,6 @@ const ConfigValidator = require('./validators/configValidator');
 class CommonConfig {
     /**
      * Configurações do broker MQTT
-     * @returns {Object} Configuração do broker
      */
     static get brokerConfig() {
         const config = {
@@ -23,26 +20,24 @@ class CommonConfig {
             }
         };
         
-        ConfigValidator.validateBrokerConfig(config);
         return config;
     }
 
     /**
      * Padrões de tópicos MQTT
-     * @returns {Object} Padrões de tópicos
      */
     static get topicPatterns() {
         return {
             TEMPERATURE: "house/{house_uuid}/temperature",
             ALERTS: "house/{house_uuid}/alerts",
             SHELF_WEIGHT: "house/{house_uuid}/shelf/{shelf_id}/weight",
-            SHELF_PRODUCTS: "house/{house_uuid}/shelf/{shelf_id}/products"
+            SHELF_PRODUCTS: "house/{house_uuid}/shelf/{shelf_id}/products",
+            BASE: "house/{house_uuid}"
         };
     }
 
     /**
      * Configurações de ambiente
-     * @returns {Object} Configurações do ambiente
      */
     static get environmentConfig() {
         return {
@@ -53,57 +48,62 @@ class CommonConfig {
     }
 
     /**
-     * Configurações de registos (logs)
-     * @returns {Object} Configurações de registos
-     */
-    static get loggingConfig() {
-        return {
-            level: process.env.NODE_ENV === 'development' ? 'debug' : 'info',
-            temperatureLogInterval: 300000, // 5 minutos
-            format: {
-                timestamp: true,
-                includeHouseId: true,
-                includeSensorId: true
-            }
-        };
-    }
-
-    /**
      * Configurações base das casas
-     * @returns {Object} Configurações das casas
      */
     static get houseConfigs() {
-        const configs = {
+        return {
             "12345": {
                 name: "Casa Principal",
                 temperature: {
                     min: 14.0,
                     max: 16.0,
                     bufferZone: 1.0,
-                    alertCooldown: 900000,    // 15 minutos
-                    readingInterval: 300000   // 5 minutos
+                    alertCooldown: 900000,
+                    readingInterval: 300000
                 },
                 shelves: [
                     {
                         id: "A1",
                         name: "Prateleira 1",
-                        maxWeight: 30000
+                        maxWeight: 30000,
+                        weightSensor: "WS-A1",
+                        rfidReader: "RFID-A1"
                     },
                     {
                         id: "A2",
                         name: "Prateleira 2",
-                        maxWeight: 30000
+                        maxWeight: 30000,
+                        weightSensor: "WS-A2",
+                        rfidReader: "RFID-A2"
+                    }
+                ],
+                products: [
+                    {
+                        id: "P1",
+                        name: "Arroz",
+                        rfid_tag: "1234567890",
+                        shelfId: "A1",
+                        min_stock: 1000,
+                        container_weight: 50
+                    },
+                    {
+                        id: "P2",
+                        name: "Massa",
+                        rfid_tag: "0987654321",
+                        shelfId: "A1",
+                        min_stock: 500,
+                        container_weight: 30
                     }
                 ]
             }
         };
+    }
 
-        // Validar cada configuração de casa
-        Object.values(configs).forEach(config => {
-            ConfigValidator.validateHouseConfig(config);
-        });
-
-        return configs;
+    /**
+     * ID da casa atual para testes e desenvolvimento
+     */
+    static get currentHouse() {
+        return "12345";
     }
 
     /**
@@ -113,22 +113,28 @@ class CommonConfig {
      * @returns {string} Tópico formatado
      */
     static formatTopic(pattern, params) {
-        if (!pattern) {
-            throw new Error("Padrão de tópico indefinido");
+        try {
+            // Se pattern for uma chave dos padrões, obter o padrão correspondente
+            const topicPattern = this.topicPatterns[pattern] || pattern;
+
+            if (!topicPattern) {
+                throw new Error("Padrão de tópico indefinido");
+            }
+
+            let formattedTopic = topicPattern;
+            
+            if (params) {
+                Object.entries(params).forEach(([key, value]) => {
+                    const placeholder = `{${key}}`;
+                    formattedTopic = formattedTopic.replace(placeholder, value);
+                });
+            }
+
+            return formattedTopic;
+        } catch (error) {
+            console.error('Erro ao formatar tópico:', error);
+            throw error;
         }
-
-        let formattedTopic = pattern;
-
-        if (params) {
-            Object.entries(params).forEach(([key, value]) => {
-                if (typeof formattedTopic !== 'string') {
-                    throw new Error(`Padrão de tópico inválido: ${pattern}`);
-                }
-                formattedTopic = formattedTopic.replace(`{${key}}`, value);
-            });
-        }
-
-        return formattedTopic;
     }
 }
 

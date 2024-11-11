@@ -5,7 +5,6 @@ const ConfigValidator = require('../../../config/validators/configValidator');
 
 /**
  * Configurações específicas do sensor de temperatura
- * Estende as configurações comuns do sistema
  */
 class TemperatureSensorConfig extends CommonConfig {
     /**
@@ -16,41 +15,43 @@ class TemperatureSensorConfig extends CommonConfig {
         const isDev = this.environmentConfig.isDevelopment;
         
         const config = {
-            publishInterval: isDev ? 5000 : 300000, // 5s dev / 5min prod
+            publishInterval: isDev ? 5000 : 300000,
             simulationConfig: {
-                min: 5.0,         // Temperatura mínima simulada
-                max: 25.0,        // Temperatura máxima simulada
-                variance: 0.2,    // Variação máxima entre leituras
-                stabilizationTime: 300000  // Tempo para estabilizar após mudança
+                min: 5.0,
+                max: 25.0,
+                variance: 0.2,
+                stabilizationTime: 300000
             },
             validation: {
-                maxRateOfChange: 0.5,     // Mudança máxima por minuto
-                stabilityThreshold: 0.1,   // Variação considerada estável
-                minReadings: 3            // Leituras mínimas para confirmação
-            },
-            alertThresholds: {
-                bufferZone: 1.0,          // Zona de tolerância para alertas
-                normalReadingsRequired: 3  // Leituras normais para normalizar
+                maxRateOfChange: 0.5,
+                stabilityThreshold: 0.1,
+                minReadings: 3
             }
         };
 
-        // Validar configuração
-        ConfigValidator.validateTemperatureConfig(config);
         return config;
     }
 
     /**
-     * Obtém configurações específicas de temperatura para uma casa
-     * @param {string} houseUuid - Identificador único da casa
-     * @returns {Object} Configurações de temperatura da casa
+     * Obtém ou cria configuração de temperatura para uma casa
+     * @param {string} houseUuid - Identificador da casa
+     * @param {Object} testConfig - Configuração opcional para testes
+     * @returns {Object} Configuração de temperatura
      */
-    static getHouseTemperatureConfig(houseUuid) {
+    static getHouseTemperatureConfig(houseUuid, testConfig = null) {
+        // Se fornecida, usar configuração de teste
+        if (testConfig) {
+            ConfigValidator.validateTemperatureConfig(testConfig);
+            return testConfig;
+        }
+
+        // Caso contrário, usar configuração padrão da casa
         const houseConfig = this.houseConfigs[houseUuid]?.temperature || {
             min: 2.0,
             max: 18.0,
             bufferZone: 1.0,
-            alertCooldown: 900000,    // 15 minutos
-            readingInterval: 300000    // 5 minutos
+            alertCooldown: 900000,
+            readingInterval: 300000
         };
 
         ConfigValidator.validateTemperatureConfig(houseConfig);
@@ -59,16 +60,10 @@ class TemperatureSensorConfig extends CommonConfig {
 
     /**
      * Regras de validação para leituras de temperatura
-     * @returns {Object} Regras de validação
      */
     static get validationRules() {
         return {
             temperature: {
-                /**
-                 * Valida o intervalo de temperatura
-                 * @param {number} temp - Temperatura a validar
-                 * @returns {Object} Resultado da validação
-                 */
                 validateRange: (temp) => {
                     const config = this.sensorConfig.simulationConfig;
                     return {
@@ -76,14 +71,6 @@ class TemperatureSensorConfig extends CommonConfig {
                         value: Math.min(Math.max(temp, config.min), config.max)
                     };
                 },
-
-                /**
-                 * Valida a mudança de temperatura
-                 * @param {number} currentTemp - Temperatura atual
-                 * @param {number} lastTemp - Última temperatura
-                 * @param {number} timeDiff - Diferença de tempo em ms
-                 * @returns {Object} Resultado da validação
-                 */
                 validateChange: (currentTemp, lastTemp, timeDiff) => {
                     if (!lastTemp) return { isValid: true, value: currentTemp };
                     

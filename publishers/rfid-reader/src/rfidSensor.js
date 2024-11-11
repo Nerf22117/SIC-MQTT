@@ -19,12 +19,21 @@ class RFIDSensor {
         this.client = null;
         this.publishInterval = null;
         this.lastReadings = new Map();
+        this.consecutiveErrors = 0;
         
         // Carregar configurações
         this.sensorConfig = Config.sensorConfig;
         this.rfidConfig = Config.getShelfRFIDConfig(shelfId);
+        
+        // Sequência de teste
         this.testTags = null;
         this.testIndex = 0;
+
+        // Tópico MQTT
+        this.topic = Config.formatTopic(Config.topicPatterns.SHELF_PRODUCTS, {
+            house_uuid: houseUuid,
+            shelf_id: shelfId
+        });
     }
 
     /**
@@ -33,26 +42,34 @@ class RFIDSensor {
      */
     async connect() {
         try {
-            this.client = mqtt.connect(Config.brokerConfig.url, Config.brokerConfig.options);
+            this.client = mqtt.connect(Config.brokerConfig.url, {
+                ...Config.brokerConfig.options,
+                clientId: `rfid_${this.rfidConfig.readerId}_${Date.now()}`
+            });
 
             this.client.on('connect', () => {
-                console.log(`Sensor RFID conectado para prateleira ${this.shelfId}`);
+                console.log(`Sensor RFID ${this.rfidConfig.readerId} conectado`);
                 this.startPublishing();
             });
 
             this.client.on('error', error => {
-                console.error(`Erro no sensor RFID: ${error.message}`);
-                this.cleanup();
+                console.error(`Erro no sensor RFID ${this.rfidConfig.readerId}:`, error);
+                this.handleError(error);
             });
+
+            this.client.on('close', () => {
+                console.log(`Sensor RFID ${this.rfidConfig.readerId} desconectado`);
+            });
+
         } catch (error) {
-            console.error(`Erro ao conectar sensor RFID: ${error.message}`);
+            console.error(`Erro ao conectar sensor RFID ${this.rfidConfig.readerId}:`, error);
             throw error;
         }
     }
 
     /**
      * Define uma sequência de tags para teste
-     * @param {Object[]} sequence - Sequência de eventos RFID
+     * @param {Array} sequence - Sequência de eventos RFID
      */
     setTestSequence(sequence) {
         this.testTags = sequence;
@@ -62,10 +79,11 @@ class RFIDSensor {
     /**
      * Simula uma leitura RFID
      * @returns {Object|null} Evento RFID ou null
+     * @private
      */
     simulateRFIDReading() {
         // Usar sequência de teste se disponível
-        if (this.testTags) {
+        if (this.testTags && this.testTags.length > 0) {
             const reading = this.testTags[this.testIndex];
             this.testIndex = (this.testIndex + 1) % this.testTags.length;
             return reading;
@@ -80,11 +98,8 @@ class RFIDSensor {
 
         // Simular erro de leitura
         if (Math.random() < config.readErrorRate) {
-            return {
-                error: true,
-                code: 'read_error',
-                message: 'Erro na leitura do RFID'
-            };
+            this.handleError(new Error('Erro simulado de leitura'));
+            return null;
         }
 
         // Determinar ação (adição/remoção)
@@ -108,6 +123,7 @@ class RFIDSensor {
     /**
      * Obtém uma tag registada aleatória
      * @returns {string} Tag RFID registada
+     * @private
      */
     getRandomRegisteredTag() {
         const validTags = this.rfidConfig.validProducts;
@@ -117,6 +133,7 @@ class RFIDSensor {
     /**
      * Gera uma tag RFID não registada
      * @returns {string} Tag RFID gerada
+     * @private
      */
     generateUnregisteredTag() {
         return Array.from({ length: 10 }, () => 
@@ -126,14 +143,10 @@ class RFIDSensor {
 
     /**
      * Inicia a publicação de leituras RFID
+     * @private
      */
     startPublishing() {
         if (this.publishInterval) return;
-
-        const topic = Config.formatTopic(Config.TOPIC_PATTERNS.SHELF_PRODUCTS, {
-            house_uuid: this.houseUuid,
-            shelf_id: this.shelfId
-        });
 
         let lastPublishedReading = null;
 
@@ -141,34 +154,76 @@ class RFIDSensor {
             const reading = this.simulateRFIDReading();
             if (!reading) return;
 
-            if (reading.error) {
-                console.error(`${reading.message} na prateleira ${this.shelfId}`);
-                return;
-            }
-
             // Validar tag RFID
             const validation = Config.validationRules.rfid.validateTag(reading.rfid_tag);
             if (!validation.isValid) {
-                console.error(`Tag RFID inválida detetada: ${reading.rfid_tag}`);
+                console.warn(`Tag RFID inválida: ${reading.rfid_tag}`);
                 return;
             }
 
-            // Evitar leituras duplicadas em sequência
+            // Evitar duplicados em sequência
             const readingKey = `${reading.rfid_tag}_${reading.action}`;
             if (lastPublishedReading === readingKey) {
                 return;
             }
 
-            this.client.publish(topic, JSON.stringify(reading), { qos: 1 }, error => {
-                if (error) {
-                    console.error(`Erro ao publicar leitura RFID: ${error.message}`);
-                } else if (Config.environmentConfig.isDevelopment) {
-                    console.log(`Leitura RFID: ${reading.action === 'add' ? 'Adicionada' : 'Removida'} tag ${reading.rfid_tag}`);
-                }
-            });
-
+            this.publishReading(reading);
             lastPublishedReading = readingKey;
+
         }, this.sensorConfig.publishInterval);
+    }
+
+    /**
+     * Publica uma leitura RFID
+     * @param {Object} reading - Leitura a publicar
+     * @private
+     */
+    publishReading(reading) {
+        if (!this.client || !this.topic) {
+            console.error('Cliente MQTT não inicializado ou tópico inválido');
+            return;
+        }
+
+        this.client.publish(
+            this.topic, 
+            JSON.stringify(reading), 
+            { qos: 1 }, 
+            this.handlePublishCallback.bind(this)
+        );
+    }
+
+    /**
+     * Processa callback de publicação
+     * @param {Error} error - Erro se houver
+     * @private
+     */
+    handlePublishCallback(error) {
+        if (error) {
+            console.error(`Erro ao publicar leitura RFID:`, error);
+            this.handleError(error);
+        } else if (Config.environmentConfig.isDevelopment) {
+            this.consecutiveErrors = 0;
+            console.log(`Leitura RFID publicada com sucesso`);
+        }
+    }
+
+    /**
+     * Processa erros do sensor
+     * @param {Error} error - Erro ocorrido
+     * @private
+     */
+    handleError(error) {
+        this.consecutiveErrors++;
+        
+        if (this.consecutiveErrors >= this.rfidConfig.errorHandling.maxConsecutiveErrors) {
+            console.error(`Número máximo de erros consecutivos atingido. Reiniciando sensor...`);
+            this.cleanup();
+            
+            // Tentar reconectar após o tempo de recuperação
+            setTimeout(() => {
+                this.connect().catch(console.error);
+            }, this.rfidConfig.errorHandling.recoveryTime);
+        }
     }
 
     /**
@@ -184,7 +239,7 @@ class RFIDSensor {
             try {
                 this.client.end(true);
             } catch (error) {
-                console.error(`Erro ao limpar recursos RFID: ${error.message}`);
+                console.error(`Erro ao limpar recursos RFID:`, error);
             }
         }
     }

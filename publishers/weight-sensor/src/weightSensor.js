@@ -27,7 +27,7 @@ class WeightSensor {
         this.testIndex = 0;
         
         // Armazenar tópico na construção
-        this.topic = Config.formatTopic(Config.TOPIC_PATTERNS.SHELF_WEIGHT, {
+        this.topic = Config.formatTopic(Config.topicPatterns.SHELF_WEIGHT, {
             house_uuid: houseUuid,
             shelf_id: shelfId
         });
