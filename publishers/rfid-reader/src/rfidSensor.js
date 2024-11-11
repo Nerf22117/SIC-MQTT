@@ -1,7 +1,6 @@
-// publishers/rfid-sensor/src/index.js
-
+// publishers\rfid-reader\src\rfidSensor.js
 const mqtt = require('mqtt');
-const Config = require('../config/config');
+const Config = require('../config/rfidSensorConfig');
 
 class RFIDSensor {
   constructor(houseUuid, shelfId) {

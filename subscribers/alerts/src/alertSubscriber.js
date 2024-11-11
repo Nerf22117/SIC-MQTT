@@ -1,6 +1,7 @@
-// subscribers/alerts/src/index.js
+// subscribers\alerts\src\alertSubscriber.js
+
 const mqtt = require('mqtt');
-const Config = require('../config/config');
+const Config = require('../config/alertConfig');
 const AlertManager = require('./alertManager');
 
 class AlertSubscriber {

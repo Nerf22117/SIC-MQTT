@@ -1,14 +1,13 @@
 // test/unifiedTest.js
-
-const TemperatureSensor = require("../publishers/temperature-sensor/src");
-const RFIDSensor = require("../publishers/rfid-reader/src");
-const WeightSensor = require("../publishers/weight-sensor/src");
-const AlertSubscriber = require("../subscribers/alerts/src");
-const AppSubscriber = require("../subscribers/app/src");
+const TemperatureSensor = require("../publishers/temperature-sensor/src/temperatureSensor");
+const RFIDSensor = require("../publishers/rfid-reader/src/rfidSensor");
+const WeightSensor = require("../publishers/weight-sensor/src/weightSensor");
+const AlertSubscriber = require("../subscribers/alerts/src/alertSubscriber");
+const AppSubscriber = require("../subscribers/app/src/appSubscriber");
 
 class UnifiedTestScenarios {
   static async runScenario(name, config) {
-    console.log(`\n=== Iniciando Cenário: ${name} ===\n`);
+    console.log(`\n=== A iniciar Cenário: ${name} ===\n`);
 
     const houseUuid = "12345";
     const shelfId = "A1";
@@ -75,7 +74,7 @@ class UnifiedTestScenarios {
   static async runAllScenarios() {
     try {
       // Cenários de Produtos
-      await this.runScenario("Produtos - Adição de Produto Registrado", {
+      await this.runScenario("Produtos - Adição de Produto registado", {
         rfidSequence: [
           { rfid_tag: "1234567890", action: "add" }
         ],
@@ -91,7 +90,7 @@ class UnifiedTestScenarios {
         temperatures: [15.0, 15.1, 15.0]
       });
 
-      await this.runScenario("Produtos - Produto Não Registrado", {
+      await this.runScenario("Produtos - Produto Não registado", {
         rfidSequence: [
           { rfid_tag: "ABCD123456", action: "add" }
         ],

@@ -1,4 +1,4 @@
-// publishers\rfid-reader\config\config.js
+// publishers\rfid-reader\config\rfidSensorConfig.js
 
 const CommonConfig = require("../../../config/commonConfig");
 

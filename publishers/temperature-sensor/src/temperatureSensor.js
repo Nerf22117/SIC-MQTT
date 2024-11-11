@@ -1,8 +1,8 @@
-// publishers/temperature-sensor/src/index.js
+// publishers\temperature-sensor\src\temperatureSensor.js
 
 require('dotenv').config();
 const mqtt = require('mqtt');
-const Config = require('../config/config');
+const Config = require('../config/temperatureSensorConfig');
 
 class TemperatureSensor {
     constructor(houseUuid) {
@@ -31,7 +31,7 @@ class TemperatureSensor {
             });
 
             this.client.on('close', () => {
-                console.log('Conexão fechada. Tentando reconectar...');
+                console.log('Conexão fechada. A tentar reconectar...');
                 this.cleanup();
             });
         } catch (error) {

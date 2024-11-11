@@ -1,13 +1,11 @@
 // test/productScenarios.js
-
-const RFIDSensor = require('../publishers/rfid-reader/src');
-const WeightSensor = require('../publishers/weight-sensor/src');
-const AlertSubscriber = require('../subscribers/alerts/src');
-const AppSubscriber = require('../subscribers/app/src');
-
+const RFIDSensor = require('../publishers/rfid-reader/src/rfidSensor');
+const WeightSensor = require('../publishers/weight-sensor/src/weightSensor');
+const AlertSubscriber = require('../subscribers/alerts/src/alertSubscriber');
+const AppSubscriber = require('../subscribers/app/src/appSubscriber');
 class ProductTestScenarios {
     static async runScenario(name, config) {
-      console.log(`\n=== Iniciando Cenário: ${name} ===\n`);
+      console.log(`\n=== A iniciar Cenário: ${name} ===\n`);
   
       const houseUuid = "12345";
       const shelfId = "A1";
@@ -59,8 +57,8 @@ class ProductTestScenarios {
   
     static async runAllScenarios() {
       try {
-        // Cenário 1: Adição de Produto Registrado
-        await this.runScenario("Adição de Produto Registrado", {
+        // Cenário 1: Adição de Produto registado
+        await this.runScenario("Adição de Produto registado", {
           rfidSequence: [{
             rfid_tag: "1234567890",
             action: "add"
@@ -77,8 +75,8 @@ class ProductTestScenarios {
           weightSequence: [2000, 1200, 450]
         });
   
-        // Cenário 3: Produto Não Registrado
-        await this.runScenario("Produto Não Registrado", {
+        // Cenário 3: Produto Não registado
+        await this.runScenario("Produto Não registado", {
           rfidSequence: [{
             rfid_tag: "ABCD123456",
             action: "add"

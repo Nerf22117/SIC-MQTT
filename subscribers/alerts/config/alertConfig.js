@@ -1,4 +1,4 @@
-// subscribers\alerts\config\config.js
+// subscribers\alerts\config\alertConfig.js
 
 const CommonConfig = require("../../../config/commonConfig");
 

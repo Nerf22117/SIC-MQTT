@@ -1,6 +1,7 @@
-// publishers/weight-sensor/src/index.js
+// publishers\weight-sensor\src\weightSensor.js
+
 const mqtt = require('mqtt');
-const Config = require('../config/config');
+const Config = require('../config/weightSensorConfig');
 
 class WeightSensor {
   constructor(houseUuid, shelfId) {

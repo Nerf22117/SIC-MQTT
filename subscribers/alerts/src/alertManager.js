@@ -1,9 +1,8 @@
 // subscribers\alerts\src\alertManager.js
 
 require("dotenv").config();
-const Config = require("../config/config");
-
-const WeightSensorConfig = require('../../../publishers/weight-sensor/config/config');
+const Config = require('../config/alertConfig');
+const WeightSensorConfig = require('../../../publishers/weight-sensor/config/weightSensorConfig');
 
 class AlertManager {
   constructor() {
@@ -115,7 +114,7 @@ correlateEvents(eventKey, houseUuid) {
 
     const weightData = this.weightReadings.get(event.data.shelf_id);
     if (!weightData) {
-        console.debug('Aguardando leitura de peso para correlação');
+        console.debug('A aguardar leitura de peso para correlação');
         return;
     }
 
@@ -168,7 +167,7 @@ correlateEvents(eventKey, houseUuid) {
       shelf_id: event.data.shelf_id
     });
 
-    // Verificar estoque baixo
+    // Verificar Stock baixo
     if (newWeight <= product.min_stock) {
       this.generateAlert({
         type: Config.alertConfig.types.PRODUCT.LOW_STOCK,

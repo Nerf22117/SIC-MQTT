@@ -1,4 +1,4 @@
-// publishers/weight-sensor/config/config.js
+// publishers\weight-sensor\config\weightSensorConfig.js
 
 const CommonConfig = require("../../../config/commonConfig");
 

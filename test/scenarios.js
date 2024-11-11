@@ -1,11 +1,11 @@
 // test/scenarios.js
-const TemperatureSensor = require('../publishers/temperature-sensor/src');
-const AlertSubscriber = require('../subscribers/alerts/src');
-const AppSubscriber = require('../subscribers/app/src');
+const TemperatureSensor = require('../publishers/temperature-sensor/src/temperatureSensor');
+const AlertSubscriber = require('../subscribers/alerts/src/alertSubscriber');
+const AppSubscriber = require('../subscribers/app/src/appSubscriber');
 
 class TestScenarios {
     static async runScenario(name, temperatures) {
-        console.log(`\n=== Iniciando Cenário: ${name} ===\n`);
+        console.log(`\n=== A iniciar Cenário: ${name} ===\n`);
         
         // Configurar sensor com temperaturas específicas
         const sensor = new TemperatureSensor('12345');

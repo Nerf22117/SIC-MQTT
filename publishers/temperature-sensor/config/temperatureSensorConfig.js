@@ -1,4 +1,4 @@
-// publishers/temperature-sensor/config/config.js
+// publishers\temperature-sensor\config\temperatureSensorConfig.js
 
 const CommonConfig = require('../../../config/commonConfig');
 

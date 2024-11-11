@@ -1,7 +1,7 @@
-// subscribers/app/config/config.js
+// subscribers\app\config\appConfig.js
 
 const CommonConfig = require("../../../config/commonConfig");
-const WeightSensorConfig = require("../../../publishers/weight-sensor/config/config");
+const WeightSensorConfig = require("../../../publishers/weight-sensor/config/weightSensorConfig");
 
 class AppConfig extends CommonConfig {
     static get displayConfig() {

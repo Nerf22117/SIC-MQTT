@@ -1,7 +1,7 @@
-// subscribers\app\src\index.js
+// subscribers\app\src\appSubscriber.js
 
 const mqtt = require("mqtt");
-const Config = require("../config/config");
+const Config = require('../config/appConfig');
 
 class AppSubscriber {
   constructor() {
@@ -371,7 +371,7 @@ findProduct(houseUuid, rfidTag) {
   async handleUnregisteredProduct(houseUuid, shelfId, data) {
     if (data.action === "add") {
       console.warn(`
-[Casa ${houseUuid}] ⚠️ Produto não registrado detectado
+[Casa ${houseUuid}] ⚠️ Produto não registado detectado
 Prateleira: ${shelfId}
 Tag RFID: ${data.rfid_tag}
 Timestamp: ${new Date(data.timestamp).toLocaleString()}
@@ -391,7 +391,7 @@ Timestamp: ${new Date(data.timestamp).toLocaleString()}
             const estimatedWeight = Math.max(0, data.weight - (product.container_weight || 0));
             state.weight = estimatedWeight;
 
-            // Verificar estoque baixo
+            // Verificar Stock baixo
             if (estimatedWeight <= product.min_stock) {
                 this.handleLowStock(houseUuid, shelfId, product, estimatedWeight);
             }
@@ -449,11 +449,11 @@ Timestamp: ${new Date(data.timestamp).toLocaleString()}
 
     if (!alertState || (now - alertState.lastNotification >= cooldown)) {
       console.log(`
-[ALERTA - Casa ${houseUuid}] ⚠️ Estoque baixo detectado!
+[ALERTA - Casa ${houseUuid}] ⚠️ Stock baixo detectado!
 Produto: ${product.name}
 Prateleira: ${shelfId}
 Peso atual: ${currentWeight.toFixed(1)}g
-Estoque mínimo: ${product.min_stock}g
+Stock mínimo: ${product.min_stock}g
 `);
 
       this.alertStates.get(houseUuid).products.set(product.id, {
@@ -509,9 +509,9 @@ Timestamp: ${new Date().toLocaleString()}
 
   displayProductAlert(houseUuid, data) {
     const alertTypes = {
-      "low_stock": "Estoque Baixo",
+      "low_stock": "Stock Baixo",
       "weight_mismatch": "Divergência de Peso",
-      "unregistered_product": "Produto Não Registrado"
+      "unregistered_product": "Produto Não registado"
     };
 
     console.log(`
