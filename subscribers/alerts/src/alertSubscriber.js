@@ -1,20 +1,40 @@
-// subscribers\alerts\src\alertSubscriber.js
+// subscribers/alerts/src/alertSubscriber.js
 
 const mqtt = require('mqtt');
 const Config = require('../config/alertConfig');
 const AlertManager = require('./alertManager');
 
+/**
+ * Subscritor de Alertas do Sistema StockWise
+ * Responsável por monitorizar eventos dos sensores e gerar alertas conforme necessário
+ */
 class AlertSubscriber {
+    /**
+     * Inicializa o subscritor de alertas
+     */
     constructor() {
+        // Componentes principais
         this.client = null;
         this.alertManager = new AlertManager();
+        
+        // Estado do sistema
         this.subscriptions = new Map();
         this.connectionRetries = 0;
         this.maxRetries = 5;
+        
+        // Inicializar gestores de tópicos
         this.topicHandlers = this.initializeTopicHandlers();
-        console.log('Topic patterns loaded:', Config.TOPIC_PATTERNS);
+        
+        if (Config.environmentConfig.isDevelopment) {
+            console.log('Padrões de tópicos carregados:', Config.TOPIC_PATTERNS);
+        }
     }
     
+    /**
+     * Inicializa os gestores de tópicos por tipo de evento
+     * @returns {Object} Mapa de gestores de tópicos
+     * @private
+     */
     initializeTopicHandlers() {
         return {
             temperature: this.handleTemperatureMessage.bind(this),
@@ -23,59 +43,85 @@ class AlertSubscriber {
         };
     }
     
+    /**
+     * Configura as subscrições para todas as casas registadas
+     * @throws {Error} Se ocorrer erro na configuração
+     */
     setupSubscriptions() {
         const houses = Object.keys(Config.houseConfigs);
         
         houses.forEach(houseUuid => {
-          try {
-            console.log(`\nConfigurando subscrições para Casa ${houseUuid}:`);
-            
-            // Base topics
-            const topics = [
-              { type: 'temperatura', topic: Config.formatTopic(Config.TOPIC_PATTERNS.TEMPERATURE, { house_uuid: houseUuid }) },
-              { type: 'alertas', topic: Config.formatTopic(Config.TOPIC_PATTERNS.ALERTS, { house_uuid: houseUuid }) }
-            ];
-    
-            // Shelf topics
-            Config.houseConfigs[houseUuid].shelves.forEach(shelf => {
-              topics.push(
-                { 
-                  type: 'peso', 
-                  topic: Config.formatTopic(Config.TOPIC_PATTERNS.SHELF_WEIGHT, { house_uuid: houseUuid, shelf_id: shelf.id }) 
-                },
-                { 
-                  type: 'produtos', 
-                  topic: Config.formatTopic(Config.TOPIC_PATTERNS.SHELF_PRODUCTS, { house_uuid: houseUuid, shelf_id: shelf.id }) 
-                }
-              );
-            });
-    
-            // Subscribe to all topics
-            topics.forEach(({type, topic}) => this.subscribeTopic(topic));
-            
-            // Log summary
-            console.log(`✓ ${topics.length} tópicos configurados com sucesso\n`);
-          } catch (error) {
-            console.error(`Erro ao configurar subscrições para casa ${houseUuid}:`, error);
-          }
+            try {
+                console.log(`\nA configurar subscrições para Casa ${houseUuid}:`);
+                
+                // Tópicos base
+                const topics = [
+                    { 
+                        type: 'temperatura', 
+                        topic: Config.formatTopic(Config.TOPIC_PATTERNS.TEMPERATURE, { house_uuid: houseUuid }) 
+                    },
+                    { 
+                        type: 'alertas', 
+                        topic: Config.formatTopic(Config.TOPIC_PATTERNS.ALERTS, { house_uuid: houseUuid }) 
+                    }
+                ];
+        
+                // Tópicos das prateleiras
+                Config.houseConfigs[houseUuid].shelves.forEach(shelf => {
+                    topics.push(
+                        { 
+                            type: 'peso', 
+                            topic: Config.formatTopic(Config.TOPIC_PATTERNS.SHELF_WEIGHT, 
+                                { house_uuid: houseUuid, shelf_id: shelf.id }) 
+                        },
+                        { 
+                            type: 'produtos', 
+                            topic: Config.formatTopic(Config.TOPIC_PATTERNS.SHELF_PRODUCTS, 
+                                { house_uuid: houseUuid, shelf_id: shelf.id }) 
+                        }
+                    );
+                });
+        
+                // Subscrever todos os tópicos
+                topics.forEach(({type, topic}) => this.subscribeTopic(topic));
+                
+                console.log(`✓ ${topics.length} tópicos configurados com sucesso\n`);
+            } catch (error) {
+                console.error(`Erro ao configurar subscrições para casa ${houseUuid}:`, error);
+                throw error;
+            }
         });
-      }
+    }
     
-      subscribeTopic(topic) {
+    /**
+     * Subscreve um tópico específico
+     * @param {string} topic - Tópico a subscrever
+     * @throws {Error} Se ocorrer erro na subscrição
+     */
+    subscribeTopic(topic) {
         if (!this.client) {
-          console.error('Cliente MQTT não inicializado');
-          return;
+            throw new Error('Cliente MQTT não inicializado');
         }
     
         this.client.subscribe(topic, { qos: 1 }, error => {
-          if (error) {
-            console.error(`Erro ao subscrever ${topic}: ${error.message}`);
-          }
+            if (error) {
+                console.error(`Erro ao subscrever ${topic}: ${error.message}`);
+                throw error;
+            }
+            
+            if (Config.environmentConfig.isDevelopment) {
+                console.log(`Subscrito ao tópico: ${topic}`);
+            }
         });
-      }
+    }
     
+    /**
+     * Estabelece conexão com o broker MQTT
+     * @throws {Error} Se ocorrer erro na conexão
+     */
     async connect() {
         try {
+            // Configurar cliente com Last Will
             this.client = mqtt.connect(Config.brokerConfig.url, {
                 ...Config.brokerConfig.options,
                 will: {
@@ -89,6 +135,7 @@ class AlertSubscriber {
                 }
             });
             
+            // Configurar eventos do cliente
             this.client.on('connect', () => {
                 console.log('Sistema de Alertas conectado ao broker');
                 this.connectionRetries = 0;
@@ -114,7 +161,12 @@ class AlertSubscriber {
         }
     }
     
-    
+    /**
+     * Determina o tipo de tópico
+     * @param {string} topic - Tópico a analisar
+     * @returns {string|null} Tipo de tópico ou null
+     * @private
+     */
     getTopicType(topic) {
         if (topic.includes('/temperature')) return 'temperature';
         if (topic.includes('/rfid')) return 'rfid';
@@ -122,6 +174,12 @@ class AlertSubscriber {
         return null;
     }
     
+    /**
+     * Processa mensagens recebidas
+     * @param {string} topic - Tópico da mensagem
+     * @param {Buffer} message - Conteúdo da mensagem
+     * @throws {Error} Se ocorrer erro no processamento
+     */
     async handleMessage(topic, message) {
         const subscription = this.subscriptions.get(topic);
         if (!subscription) return;
@@ -150,6 +208,13 @@ class AlertSubscriber {
         }
     }
     
+    /**
+     * Processa mensagens de temperatura
+     * @param {string} houseUuid - Identificador da casa
+     * @param {Object} data - Dados de temperatura
+     * @returns {Promise<Object>} Alerta gerado
+     * @private
+     */
     async handleTemperatureMessage(houseUuid, data) {
         return this.alertManager.processTemperatureAlert(
             houseUuid,
@@ -157,16 +222,37 @@ class AlertSubscriber {
         );
     }
     
+    /**
+     * Processa mensagens RFID
+     * @param {string} houseUuid - Identificador da casa
+     * @param {Object} data - Dados RFID
+     * @returns {Promise<null>} Sem alerta imediato
+     * @private
+     */
     async handleRFIDMessage(houseUuid, data) {
         this.alertManager.handleRFIDEvent(houseUuid, data);
         return null; // Alertas serão gerados após correlação com peso
     }
     
+    /**
+     * Processa mensagens de peso
+     * @param {string} houseUuid - Identificador da casa
+     * @param {Object} data - Dados de peso
+     * @returns {Promise<null>} Sem alerta imediato
+     * @private
+     */
     async handleWeightMessage(houseUuid, data) {
         this.alertManager.handleWeightEvent(houseUuid, data);
         return null; // Alertas serão gerados após correlação com RFID
     }
     
+    /**
+     * Publica um alerta no broker
+     * @param {string} houseUuid - Identificador da casa
+     * @param {Object} alert - Alerta a publicar
+     * @returns {Promise<void>}
+     * @throws {Error} Se ocorrer erro na publicação
+     */
     async publishAlert(houseUuid, alert) {
         const topic = Config.formatTopic(Config.topicPatterns.ALERTS, {
             house_uuid: houseUuid
@@ -184,62 +270,75 @@ class AlertSubscriber {
                     if (Config.environmentConfig.isDevelopment) {
                         console.log(`Alerta publicado no tópico ${topic}:`, 
                             formattedAlert);
-                        } else {
-                            console.log(
-                                `Alerta de ${formattedAlert.type} publicado para casa ${houseUuid}`
-                            );
-                        }
-                        resolve();
+                    } else {
+                        console.log(
+                            `Alerta de ${formattedAlert.type} publicado para casa ${houseUuid}`
+                        );
                     }
-                });
-            });
-        }
-        
-        cleanup() {
-            this.announceStatus('disconnecting');
-            
-            if (this.client) {
-                try {
-                    this.client.end(true);
-                } catch (error) {
-                    console.error(`Erro ao limpar recursos: ${error.message}`);
+                    resolve();
                 }
-            }
-        }
-        
-        handleConnectionError() {
-            this.connectionRetries++;
-            if (this.connectionRetries >= this.maxRetries) {
-                console.error('Número máximo de tentativas de reconexão atingido.');
-                this.cleanup();
-                process.exit(1);
-            }
-        }
-        
-        announceStatus(status) {
-            if (!this.client) return;
-            
-            this.client.publish(
-                'system/alerts/status',
-                JSON.stringify({
-                    status,
-                    timestamp: new Date().toISOString()
-                }),
-                { qos: 1, retain: true }
-            );
-        }
-    }
-    
-    // Inicializar o sistema de alertas
-    if (require.main === module) {
-        const alertSystem = new AlertSubscriber();
-        alertSystem.connect().catch(console.error);
-        
-        process.on('SIGINT', () => {
-            console.log('Encerrando sistema de alertas...');
-            alertSystem.cleanup();
-            process.exit(0);
+            });
         });
     }
+        
+    /**
+     * Limpa recursos e encerra conexões
+     */
+    cleanup() {
+        this.announceStatus('disconnecting');
+        
+        if (this.client) {
+            try {
+                this.client.end(true);
+            } catch (error) {
+                console.error(`Erro ao limpar recursos: ${error.message}`);
+            }
+        }
+    }
     
-    module.exports = AlertSubscriber;
+    /**
+     * Gere erros de conexão
+     * @private
+     */
+    handleConnectionError() {
+        this.connectionRetries++;
+        if (this.connectionRetries >= this.maxRetries) {
+            console.error('Número máximo de tentativas de reconexão atingido.');
+            this.cleanup();
+            process.exit(1);
+        }
+    }
+    
+    /**
+     * Anuncia estado do sistema
+     * @param {string} status - Estado a anunciar
+     * @private
+     */
+    announceStatus(status) {
+        if (!this.client) return;
+        
+        this.client.publish(
+            'system/alerts/status',
+            JSON.stringify({
+                status,
+                timestamp: new Date().toISOString()
+            }),
+            { qos: 1, retain: true }
+        );
+    }
+}
+
+// Inicializar o sistema de alertas
+if (require.main === module) {
+    const alertSystem = new AlertSubscriber();
+    alertSystem.connect().catch(console.error);
+    
+    // Gerir encerramento gracioso
+    process.on('SIGINT', () => {
+        console.log('A encerrar sistema de alertas...');
+        alertSystem.cleanup();
+        process.exit(0);
+    });
+}
+
+module.exports = AlertSubscriber;
