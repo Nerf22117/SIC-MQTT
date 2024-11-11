@@ -1,165 +1,154 @@
-// publishers/rfid-reader/src/index.js
+// publishers/rfid-sensor/src/index.js
 
 const mqtt = require('mqtt');
-const config = require('../config/config.js');
-const client = mqtt.connect(config.brokerUrl);
+const Config = require('../config/config');
 
-class RFIDReader {
-    constructor(houseUuid, shelfId) {
-        this.houseUuid = houseUuid;
-        this.shelfId = shelfId;
-        this.activeProducts = new Map(); // Tags atualmente na prateleira
-        this.lastReadTime = new Map();   // Última leitura de cada tag
+class RFIDSensor {
+  constructor(houseUuid, shelfId) {
+    this.houseUuid = houseUuid;
+    this.shelfId = shelfId;
+    this.client = null;
+    this.publishInterval = null;
+    this.lastReadings = new Map();
+    this.rfidConfig = Config.getShelfRFIDConfig(shelfId);
+    this.testTags = null;
+    this.testIndex = 0;
+  }
+
+  async connect() {
+    try {
+      this.client = mqtt.connect(Config.brokerConfig.url, Config.brokerConfig.options);
+
+      this.client.on('connect', () => {
+        console.log(`Sensor RFID conectado para prateleira ${this.shelfId}`);
+        this.startPublishing();
+      });
+
+      this.client.on('error', error => {
+        console.error(`Erro no sensor RFID: ${error.message}`);
+        this.cleanup();
+      });
+    } catch (error) {
+      throw console.error(`Erro ao conectar sensor RFID: ${error.message}`);
+    }
+  }
+
+  setTestSequence(sequence) {
+    this.testTags = sequence;
+    this.testIndex = 0;
+  }
+
+  simulateRFIDReading() {
+    if (this.testTags) {
+      const reading = this.testTags[this.testIndex];
+      this.testIndex = (this.testIndex + 1) % this.testTags.length;
+      return reading;
     }
 
-    generateTopic(type) {
-        return `house/${this.houseUuid}/pantry/${this.shelfId}/${type}`;
+    const { simulationConfig: config } = Config.sensorConfig;
+
+    // Random chance of no reading
+    if (Math.random() > config.readProbability) {
+      return null;
     }
 
-    // Simula detecção de tag RFID
-    processTag(tagId) {
-        const currentTime = Date.now();
-        
-        // Verificar se é uma nova tag ou uma que saiu do alcance
-        if (!this.lastReadTime.has(tagId)) {
-            // Nova tag detectada
-            this.handleNewTag(tagId, currentTime);
+    // Random chance of read error
+    if (Math.random() < config.readErrorRate) {
+      return {
+        error: true,
+        code: 'read_error',
+        message: 'Erro na leitura do RFID'
+      };
+    }
+
+    // Determine if adding or removing product
+    const isAdd = Math.random() < config.movementPatterns.addProbability;
+
+    // Generate tag (90% chance of registered tag, 10% chance of unregistered)
+    let rfidTag = Math.random() > 0.1 
+      ? this.getRandomRegisteredTag() 
+      : this.generateUnregisteredTag();
+
+    return {
+      type: 'rfid_event',
+      shelf_id: this.shelfId,
+      reader_id: this.rfidConfig.readerId,
+      rfid_tag: rfidTag,
+      action: isAdd ? 'add' : 'remove',
+      timestamp: new Date().toISOString()
+    };
+  }
+
+  getRandomRegisteredTag() {
+    const validTags = this.rfidConfig.validProducts;
+    return validTags[Math.floor(Math.random() * validTags.length)];
+  }
+
+  generateUnregisteredTag() {
+    return Array.from({ length: 10 }, () => 
+      Math.floor(Math.random() * 16).toString(16)
+    ).join('').toUpperCase();
+  }
+
+  startPublishing() {
+    if (this.publishInterval) return;
+
+    const topic = Config.formatTopic(Config.TOPIC_PATTERNS.SHELF_PRODUCTS, {
+      house_uuid: this.houseUuid,
+      shelf_id: this.shelfId
+    });
+
+    let lastPublishedReading = null;
+
+    this.publishInterval = setInterval(() => {
+      const reading = this.simulateRFIDReading();
+      if (!reading) return;
+
+      if (reading.error) {
+        console.error(`${reading.message} na prateleira ${this.shelfId}`);
+        return;
+      }
+
+      // Validar tag RFID
+      const validation = Config.validationRules.rfid.validateTag(reading.rfid_tag);
+      if (!validation.isValid) {
+        console.error(`Tag RFID inválida detectada: ${reading.rfid_tag}`);
+        return;
+      }
+
+      // Evitar logs duplicados em sequência
+      const readingKey = `${reading.rfid_tag}_${reading.action}`;
+      if (lastPublishedReading === readingKey) {
+        this.client.publish(topic, JSON.stringify(reading), { qos: 1 });
+        return;
+      }
+
+      this.client.publish(topic, JSON.stringify(reading), { qos: 1 }, error => {
+        if (error) {
+          console.error(`Erro ao publicar leitura RFID: ${error.message}`);
+        } else if (Config.environmentConfig.isDevelopment) {
+          console.log(`Leitura RFID: ${reading.action === 'add' ? 'Adicionado' : 'Removido'} tag ${reading.rfid_tag}`);
         }
-        
-        // Atualizar timestamp da última leitura
-        this.lastReadTime.set(tagId, currentTime);
+      });
+
+      lastPublishedReading = readingKey;
+    }, Config.sensorConfig.publishInterval);
+  }
+
+  cleanup() {
+    if (this.publishInterval) {
+      clearInterval(this.publishInterval);
+      this.publishInterval = null;
     }
 
-    // Lidar com nova tag detectada
-    handleNewTag(tagId, timestamp) {
-        const productInfo = this.getProductInfo(tagId);
-        
-        if (productInfo) {
-            // Produto conhecido
-            this.activeProducts.set(tagId, productInfo);
-            this.publishRFIDEvent(tagId, 'detected', productInfo);
-        } else {
-            // Produto não registrado
-            this.publishRFIDEvent(tagId, 'unregistered');
-        }
+    if (this.client) {
+      try {
+        this.client.end(true);
+      } catch (error) {
+        console.error(`Erro ao limpar recursos RFID: ${error.message}`);
+      }
     }
-
-    // Verificar tags que não são mais detectadas
-    checkInactiveProducts() {
-        const currentTime = Date.now();
-        
-        this.lastReadTime.forEach((lastRead, tagId) => {
-            if (currentTime - lastRead > config.reader.timeout) {
-                // Tag não detectada por tempo suficiente - produto removido
-                if (this.activeProducts.has(tagId)) {
-                    const productInfo = this.activeProducts.get(tagId);
-                    this.publishRFIDEvent(tagId, 'removed', productInfo);
-                    this.activeProducts.delete(tagId);
-                }
-                this.lastReadTime.delete(tagId);
-            }
-        });
-    }
-
-    // Buscar informações do produto pela tag
-    getProductInfo(tagId) {
-        return config.simulation.knownTags[tagId];
-    }
-
-    // Publicar evento RFID
-    publishRFIDEvent(tagId, event, productInfo = null) {
-        const rfidTopic = this.generateTopic('rfid');
-        const actionTopic = this.generateTopic('action');
-        
-        // Mensagem básica de RFID
-        const rfidMessage = {
-            event,
-            tag_id: tagId,
-            shelf_id: this.shelfId,
-            timestamp: new Date().toISOString()
-        };
-
-        // Adicionar informações do produto se disponíveis
-        if (productInfo) {
-            rfidMessage.product_id = productInfo.id;
-            rfidMessage.product_name = productInfo.name;
-            rfidMessage.expected_weight = productInfo.weight;
-        }
-
-        // Publicar evento RFID
-        client.publish(rfidTopic, JSON.stringify(rfidMessage), { qos: 1 });
-        console.log(`[RFID ${this.shelfId}] Evento: ${event}, Tag: ${tagId}`);
-
-        // Publicar ação se for produto conhecido
-        if (productInfo && (event === 'detected' || event === 'removed')) {
-            const actionMessage = {
-                action: event === 'detected' ? 'add' : 'remove',
-                tag_id: tagId,
-                product_id: productInfo.id,
-                product_name: productInfo.name,
-                expected_weight: productInfo.weight,
-                timestamp: new Date().toISOString()
-            };
-
-            client.publish(actionTopic, JSON.stringify(actionMessage), { qos: 1 });
-            console.log(`[RFID ${this.shelfId}] Ação: ${actionMessage.action} - Produto: ${productInfo.name}`);
-        }
-    }
+  }
 }
 
-// Inicializar leitores RFID
-const rfidReaders = new Map();
-
-// Criar leitores para cada prateleira
-config.shelves["12345"].forEach(shelf => {
-    rfidReaders.set(shelf.id, new RFIDReader("12345", shelf.id));
-});
-
-// Simulação de eventos RFID
-function simulateRFIDEvents() {
-    const readers = Array.from(rfidReaders.values());
-    const reader = readers[0]; // Usar primeiro leitor para simulação principal
-    
-    // Simular sequência de eventos
-    setTimeout(() => {
-        console.log("\n=== Simulando adição de produto conhecido (Arroz) ===");
-        reader.processTag("RFID001");
-    }, 3000);
-
-    setTimeout(() => {
-        console.log("\n=== Simulando produto desconhecido ===");
-        reader.processTag("RFID999");
-    }, 8000);
-
-    setTimeout(() => {
-        console.log("\n=== Simulando remoção de produto (Arroz) ===");
-        // Não processar a tag simula sua remoção
-        // O checkInactiveProducts vai detectar a ausência
-    }, 13000);
-
-    setTimeout(() => {
-        console.log("\n=== Simulando adição de outro produto (Massa) ===");
-        reader.processTag("RFID002");
-    }, 18000);
-
-    // Verificar produtos inativos periodicamente
-    setInterval(() => {
-        readers.forEach(reader => reader.checkInactiveProducts());
-    }, config.reader.readInterval);
-}
-
-// Conexão MQTT
-client.on('connect', () => {
-    console.log('Sistema RFID Conectado');
-    
-    if (config.simulation.enabled) {
-        console.log('Iniciando simulação de eventos RFID...');
-        simulateRFIDEvents();
-    }
-});
-
-// Gestão de encerramento gracioso
-process.on('SIGINT', () => {
-    console.log('\nDesligando sistema RFID...');
-    setTimeout(() => process.exit(0), 500);
-});
+module.exports = RFIDSensor;

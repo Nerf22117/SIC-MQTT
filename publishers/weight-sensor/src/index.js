@@ -1,146 +1,169 @@
 // publishers/weight-sensor/src/index.js
-
 const mqtt = require('mqtt');
-const config = require('../config/config.js');
-const client = mqtt.connect(config.brokerUrl);
+const Config = require('../config/config');
 
 class WeightSensor {
-    constructor(houseUuid, shelfId) {
-        this.houseUuid = houseUuid;
-        this.shelfId = shelfId;
-        this.lastWeight = 0;
-        this.lastStableWeight = 0;
-        this.weightBuffer = [];
-    }
-
-    // Gera tópico para a prateleira
-    generateTopic() {
-        return `house/${this.houseUuid}/pantry/${this.shelfId}/weight`;
-    }
-
-    // Processa nova leitura de peso
-    processWeight(weight) {
-        this.weightBuffer.push(weight);
-        
-        // Manter buffer com últimas 5 leituras
-        if (this.weightBuffer.length > 5) {
-            this.weightBuffer.shift();
-        }
-
-        // Publicar apenas se o peso estiver estável e houver mudança significativa
-        if (this.isWeightStable() && this.hasSignificantChange()) {
-            const avgWeight = this.calculateAverageWeight();
-            this.publishWeight(avgWeight);
-            this.lastStableWeight = avgWeight;
-        }
-
-        this.lastWeight = weight;
-    }
-
-    // Verifica se o peso está estável
-    isWeightStable() {
-        if (this.weightBuffer.length < 5) return false;
-        
-        const maxDiff = Math.max(...this.weightBuffer) - Math.min(...this.weightBuffer);
-        return maxDiff < config.weightThresholds.minWeightChange;
-    }
-
-    // Verifica se houve mudança significativa de peso
-    hasSignificantChange() {
-        const avgWeight = this.calculateAverageWeight();
-        return Math.abs(avgWeight - this.lastStableWeight) > config.weightThresholds.minWeightChange;
-    }
-
-    // Calcula média do peso
-    calculateAverageWeight() {
-        const sum = this.weightBuffer.reduce((acc, val) => acc + val, 0);
-        return Math.round(sum / this.weightBuffer.length);
-    }
-
-    // Publica peso atual
-    publishWeight(weight) {
-        const message = {
-            weight,
-            previous_weight: this.lastStableWeight,
-            weight_change: weight - this.lastStableWeight,
-            shelfId: this.shelfId,
-            timestamp: new Date().toISOString()
-        };
-        
-        client.publish(this.generateTopic(), JSON.stringify(message), { qos: 1 });
-        console.log(`[Prateleira ${this.shelfId}] Mudança de peso detectada:`);
-        console.log(`  - Peso atual: ${weight}g`);
-        console.log(`  - Peso anterior: ${this.lastStableWeight}g`);
-        console.log(`  - Variação: ${message.weight_change}g`);
-    }
-}
-
-// Inicializar sensores para cada prateleira
-const weightSensors = new Map();
-
-// Criar sensores para cada prateleira configurada
-config.shelves["12345"].forEach(shelf => {
-    weightSensors.set(shelf.id, new WeightSensor("12345", shelf.id));
-});
-
-// Função para simular mudança gradual de peso
-function simulateGradualChange(sensor, targetChange, duration) {
-    const startWeight = sensor.lastStableWeight;
-    const endWeight = startWeight + targetChange;
-    const steps = duration / config.readingInterval;
-    const weightStep = targetChange / steps;
-    let currentStep = 0;
-
-    const interval = setInterval(() => {
-        if (currentStep >= steps) {
-            clearInterval(interval);
-            return;
-        }
-
-        const currentWeight = startWeight + (weightStep * currentStep);
-        // Adicionar ruído se habilitado
-        const noise = config.simulation.noise.enabled ? 
-            (Math.random() - 0.5) * config.simulation.noise.maxVariation * 2 : 
-            0;
-
-        sensor.processWeight(currentWeight + noise);
-        currentStep++;
-    }, config.readingInterval);
-}
-
-// Função para executar cenários de simulação
-function runSimulationScenarios(sensor) {
-    config.simulation.scenarios.forEach(scenario => {
-        setTimeout(() => {
-            console.log(`\n=== Iniciando Cenário: ${scenario.description} ===`);
-            simulateGradualChange(sensor, scenario.weightChange, scenario.duration);
-        }, scenario.delay);
-    });
-}
-
-client.on('connect', () => {
-    console.log('Sistema de Sensores de Peso Conectado');
+  constructor(houseUuid, shelfId) {
+    this.houseUuid = houseUuid;
+    this.shelfId = shelfId;
+    this.client = null;
+    this.publishInterval = null;
+    this.lastReading = null;
+    this.lastPublishedReading = null;
+    this.stabilizationTimer = null;
+    this.weightConfig = Config.getShelfWeightConfig(shelfId);
+    this.isStabilizing = false;
+    this.testWeights = null;
+    this.testIndex = 0;
     
-    if (config.simulation.enabled) {
-        console.log('Iniciando simulação de cenários...');
-        // Usar primeira prateleira para simulação
-        const primarySensor = weightSensors.get("A1");
-        runSimulationScenarios(primarySensor);
-        
-        // Simular pequenas variações aleatórias nas outras prateleiras
-        weightSensors.forEach((sensor, shelfId) => {
-            if (shelfId !== "A1") {
-                setInterval(() => {
-                    const smallChange = (Math.random() - 0.5) * 20;
-                    sensor.processWeight(Math.max(0, sensor.lastStableWeight + smallChange));
-                }, 2000);
-            }
-        });
-    }
-});
+    // Store topic at construction time
+    this.topic = Config.formatTopic(Config.TOPIC_PATTERNS.SHELF_WEIGHT, {
+      house_uuid: houseUuid,
+      shelf_id: shelfId
+    });
+  }
 
-// Gestão de encerramento gracioso
-process.on('SIGINT', () => {
-    console.log('\nDesligando sensores de peso...');
-    setTimeout(() => process.exit(0), 500);
-});
+  async connect() {
+    try {
+      this.client = mqtt.connect(Config.brokerConfig.url, Config.brokerConfig.options);
+
+      this.client.on('connect', () => {
+        console.log(`Sensor de peso conectado para prateleira ${this.shelfId}`);
+        this.startPublishing();
+      });
+
+      this.client.on('error', error => {
+        console.error(`Erro no sensor de peso: ${error.message}`);
+        this.cleanup();
+      });
+    } catch (error) {
+      console.error(`Erro ao conectar sensor de peso: ${error.message}`);
+      throw error;
+    }
+  }
+
+  setTestSequence(sequence) {
+    this.testWeights = sequence;
+    this.testIndex = 0;
+  }
+
+  simulateWeightReading() {
+    if (this.testWeights) {
+      const weight = this.testWeights[this.testIndex];
+      this.testIndex = (this.testIndex + 1) % this.testWeights.length;
+      return { weight, isStable: true };
+    }
+
+    const config = Config.sensorConfig;
+
+    if (this.lastReading === null) {
+      return { weight: 0, isStable: true };
+    }
+
+    let reading = this.lastReading;
+
+    if (this.isStabilizing) {
+      const oscillation = (Math.random() - 0.5) * config.movementPatterns.oscillationRange;
+      reading += oscillation;
+    } else {
+      const noise = (Math.random() - 0.5) * config.noiseLevel;
+      const drift = (Math.random() * config.driftRate) / 3600;
+      reading += noise + drift;
+    }
+
+    const validation = Config.validationRules.weight.validateReading(reading, this.lastReading);
+    if (!validation.isValid) {
+      console.warn(`Leitura inválida detectada: ${validation.reason}`);
+      return null;
+    }
+
+    const isStable = Math.abs(reading - this.lastReading) < config.validation.stabilityThreshold;
+    return { weight: validation.value, isStable };
+  }
+
+  processWeightChange(reading) {
+    const config = Config.sensorConfig;
+    const minWeightChange = config.validation.minWeightChange || 50; // Default value if not set
+    
+    const significantChange = this.lastPublishedReading && 
+      Math.abs(reading.weight - this.lastPublishedReading) > minWeightChange;
+
+    if (significantChange) {
+      this.isStabilizing = true;
+      if (this.stabilizationTimer) {
+        clearTimeout(this.stabilizationTimer);
+      }
+      this.stabilizationTimer = setTimeout(() => {
+        this.isStabilizing = false;
+        this.publishWeightReading(reading.weight, true);
+      }, config.simulationConfig.stabilizationTime);
+    }
+
+    return reading;
+  }
+
+  startPublishing() {
+    if (this.publishInterval) return;
+
+    this.publishInterval = setInterval(() => {
+      const reading = this.simulateWeightReading();
+      if (!reading) return;
+
+      this.lastReading = reading.weight;
+      const processedReading = this.processWeightChange(reading);
+
+      if (processedReading.isStable || Config.environmentConfig.isDevelopment) {
+        this.publishWeightReading(processedReading.weight, processedReading.isStable);
+      }
+    }, Config.sensorConfig.publishInterval);
+  }
+
+  publishWeightReading(weight, isStable) {
+    const event = {
+      type: 'weight_event',
+      shelf_id: this.shelfId,
+      sensor_id: this.weightConfig.sensorId,
+      weight: weight,
+      is_stable: isStable,
+      timestamp: new Date().toISOString()
+    };
+
+    if (!this.client || !this.topic) {
+      console.error('Cliente MQTT não inicializado ou tópico inválido');
+      return;
+    }
+
+    this.client.publish(this.topic, JSON.stringify(event), { qos: 1 }, error => {
+      if (error) {
+        console.error(`Erro ao publicar leitura de peso: ${error.message}`);
+      } else {
+        this.lastPublishedReading = weight;
+        if (Config.environmentConfig.isDevelopment) {
+          console.log(`Leitura de peso publicada: ${JSON.stringify(event)}`);
+        }
+      }
+    });
+  }
+
+  cleanup() {
+    if (this.publishInterval) {
+      clearInterval(this.publishInterval);
+      this.publishInterval = null;
+    }
+
+    if (this.stabilizationTimer) {
+      clearTimeout(this.stabilizationTimer);
+      this.stabilizationTimer = null;
+    }
+
+    if (this.client) {
+      try {
+        this.client.end(true);
+      } catch (error) {
+        console.error(`Erro ao limpar recursos do sensor de peso: ${error.message}`);
+      }
+    }
+  }
+}
+
+module.exports = WeightSensor;

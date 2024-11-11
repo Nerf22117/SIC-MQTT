@@ -3,45 +3,56 @@
 require('dotenv').config();
 
 const MQTT_PROTOCOLS = {
-    MQTT: 'mqtt://',
-    MQTTS: 'mqtts://',
-    WS: 'ws://',
-    WSS: 'wss://'
-};
-
-const TOPIC_PATTERNS = {
-    TEMPERATURE: 'house/{house_uuid}/temperature',
-    ALERTS: 'house/{house_uuid}/alerts',
-    SHELF_WEIGHT: 'house/{house_uuid}/shelf/{shelf_id}/weight',
-    SHELF_PRODUCTS: 'house/{house_uuid}/shelf/{shelf_id}/products'
-};
-
-const MQTT_OPTIONS = {
+    MQTT: "mqtt://",
+    MQTTS: "mqtts://",
+    WS: "ws://",
+    WSS: "wss://"
+  };
+  
+  const TOPIC_PATTERNS = {
+    TEMPERATURE: "house/{house_uuid}/temperature",
+    ALERTS: "house/{house_uuid}/alerts",
+    SHELF_WEIGHT: "house/{house_uuid}/shelf/{shelf_id}/weight",
+    SHELF_PRODUCTS: "house/{house_uuid}/shelf/{shelf_id}/products"
+  };
+  
+  const MQTT_OPTIONS = {
     clean: true,
     connectTimeout: 4000,
     reconnectPeriod: 1000,
     qos: 1,
     retain: false
-};
-
-class CommonConfig {
+  };
+  
+  class CommonConfig {
     static get brokerConfig() {
-        return {
-            url: process.env.MQTT_BROKER_URL || 'mqtt://localhost:1883',
-            options: MQTT_OPTIONS
-        };
+      return {
+        url: process.env.MQTT_BROKER_URL || "mqtt://localhost:1883",
+        options: MQTT_OPTIONS
+      };
     }
-
+  
     static get topicPatterns() {
-        return TOPIC_PATTERNS;
+      return TOPIC_PATTERNS;
     }
-
+  
     static formatTopic(pattern, params) {
-        let formattedTopic = pattern;
+      if (!pattern) {
+        throw new Error("Topic pattern is undefined");
+      }
+  
+      let formattedTopic = pattern;
+  
+      if (params) {
         Object.entries(params).forEach(([key, value]) => {
-            formattedTopic = formattedTopic.replace(`{${key}}`, value);
+          if (typeof formattedTopic !== 'string') {
+            throw new Error(`Invalid topic pattern: ${pattern}`);
+          }
+          formattedTopic = formattedTopic.replace(`{${key}}`, value);
         });
-        return formattedTopic;
+      }
+  
+      return formattedTopic;
     }
 
     static get houseConfigs() {
@@ -56,8 +67,20 @@ class CommonConfig {
                     readingInterval: 300000   // 5 minutos em produção
                 },
                 shelves: [
-                    { id: "A1", name: "Prateleira 1", maxWeight: 30000 },
-                    { id: "A2", name: "Prateleira 2", maxWeight: 30000 }
+                    {
+                        id: "A1",
+                        name: "Prateleira 1",
+                        maxWeight: 30000,
+                        rfidReader: "RFID-A1", // Necessário para logs
+                        weightSensor: "WS-A1" // Necessário para logs
+                    },
+                    {
+                        id: "A2",
+                        name: "Prateleira 2",
+                        maxWeight: 30000,
+                        rfidReader: "RFID-A2",
+                        weightSensor: "WS-A2"
+                    }
                 ],
                 products: [
                     {
