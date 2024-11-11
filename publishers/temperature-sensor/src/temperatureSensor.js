@@ -1,10 +1,17 @@
-// publishers\temperature-sensor\src\temperatureSensor.js
+// publishers/temperature-sensor/src/temperatureSensor.js
 
-require('dotenv').config();
 const mqtt = require('mqtt');
 const Config = require('../config/temperatureSensorConfig');
 
+/**
+ * Implementação do sensor de temperatura
+ * Responsável por simular e publicar leituras de temperatura
+ */
 class TemperatureSensor {
+    /**
+     * Inicializa o sensor de temperatura
+     * @param {string} houseUuid - Identificador único da casa
+     */
     constructor(houseUuid) {
         this.houseUuid = houseUuid;
         this.client = null;
@@ -13,9 +20,17 @@ class TemperatureSensor {
         this.publishInterval = null;
         this.isStabilizing = false;
         this.testTemperatures = null;
-        this.textIndex = 0;
+        this.testIndex = 0;
+
+        // Carregar configurações
+        this.sensorConfig = Config.sensorConfig;
+        this.houseConfig = Config.getHouseTemperatureConfig(houseUuid);
     }
 
+    /**
+     * Estabelece conexão com o broker MQTT
+     * @throws {Error} Se ocorrer erro na conexão
+     */
     async connect() {
         try {
             this.client = mqtt.connect(Config.brokerConfig.url, Config.brokerConfig.options);
@@ -40,29 +55,37 @@ class TemperatureSensor {
         }
     }
 
+    /**
+     * Define uma sequência de temperaturas para teste
+     * @param {number[]} temperatures - Temperaturas de teste
+     */
     setTestTemperatures(temperatures) {
         this.testTemperatures = temperatures;
         this.testIndex = 0;
     }
 
+    /**
+     * Gera uma nova leitura de temperatura
+     * @returns {string} Temperatura gerada
+     */
     generateTemperature() {
+        // Usar temperaturas de teste se disponíveis
         if (this.testTemperatures !== null) {
-            // Se houver temperaturas de teste definidas, usar a próxima temperatura da lista
             const newTemp = this.testTemperatures[this.testIndex].toFixed(2);
             this.testIndex = (this.testIndex + 1) % this.testTemperatures.length;
             this.lastTemperature = newTemp;
             return newTemp;
         }
 
-        else {
-        const { min, max, variance } = Config.sensorConfig.simulationConfig;
+        // Gerar temperatura simulada
+        const { min, max, variance } = this.sensorConfig.simulationConfig;
         let newTemp;
 
         if (this.lastTemperature === null) {
-            // Primeira leitura - começar com um valor médio
+            // Primeira leitura - começar com valor médio
             newTemp = ((max + min) / 2).toFixed(2);
         } else {
-            // Gerar uma variação realista baseada na última temperatura
+            // Gerar variação realista
             const variation = (Math.random() * 2 - 1) * variance;
             newTemp = (parseFloat(this.lastTemperature) + variation).toFixed(2);
         }
@@ -75,7 +98,7 @@ class TemperatureSensor {
             newTemp = rangeCheck.value.toFixed(2);
         }
 
-        // Validar a taxa de mudança se não for a primeira leitura
+        // Validar taxa de mudança
         if (this.lastTemperature !== null && this.lastPublishTime !== null) {
             const timeDiff = Date.now() - this.lastPublishTime;
             const changeCheck = validation.validateChange(
@@ -91,9 +114,12 @@ class TemperatureSensor {
         }
 
         this.lastTemperature = newTemp;
-        return newTemp;}
+        return newTemp;
     }
 
+    /**
+     * Inicia a publicação de leituras de temperatura
+     */
     startPublishing() {
         if (this.publishInterval) return;
 
@@ -118,7 +144,7 @@ class TemperatureSensor {
                 } else {
                     if (Config.environmentConfig.isDevelopment || 
                         !this.lastPublishTime || 
-                        now - this.lastPublishTime >= Config.loggingConfig.temperatureLogInterval) {
+                        now - this.lastPublishTime >= Config.sensorConfig.publishInterval) {
                         console.log(`Temperatura publicada: ${temperature}°C no tópico ${topic}`);
                         this.lastPublishTime = now;
                     }
@@ -126,12 +152,16 @@ class TemperatureSensor {
             });
 
             // Verificar se ainda está em período de estabilização
-            if (this.isStabilizing && now - this.lastPublishTime >= Config.sensorConfig.simulationConfig.stabilizationTime) {
+            if (this.isStabilizing && 
+                now - this.lastPublishTime >= this.sensorConfig.simulationConfig.stabilizationTime) {
                 this.isStabilizing = false;
             }
-        }, Config.sensorConfig.publishInterval);
+        }, this.sensorConfig.publishInterval);
     }
 
+    /**
+     * Limpa recursos e encerra conexões
+     */
     cleanup() {
         if (this.publishInterval) {
             clearInterval(this.publishInterval);
@@ -145,30 +175,6 @@ class TemperatureSensor {
             }
         }
     }
-}
-
-// Iniciar sensores para cada casa configurada
-async function initializeSensors() {
-    const houses = Object.keys(Config.houseConfigs);
-    
-    for (const houseUuid of houses) {
-        try {
-            const sensor = new TemperatureSensor(houseUuid);
-            await sensor.connect();
-        } catch (error) {
-            console.error(`Falha ao inicializar sensor para casa ${houseUuid}: ${error.message}`);
-        }
-    }
-}
-
-// Iniciar apenas se não estivermos em modo de teste
-if (require.main === module) {
-    initializeSensors().catch(console.error);
-
-    process.on('SIGINT', () => {
-        console.log('Encerrando sensores de temperatura...');
-        process.exit(0);
-    });
 }
 
 module.exports = TemperatureSensor;
