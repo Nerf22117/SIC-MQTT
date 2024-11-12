@@ -5,6 +5,7 @@ const RFIDSensor = require('../publishers/rfid-reader/src/rfidSensor');
 const WeightSensor = require('../publishers/weight-sensor/src/weightSensor');
 const AlertSubscriber = require('../subscribers/alerts/src/alertSubscriber');
 const AppSubscriber = require('../subscribers/app/src/appSubscriber');
+const CommonConfig = require('../config/commonConfig');
 
 /**
  * Cenários de Teste Unificados do StockWise
@@ -21,10 +22,9 @@ class UnifiedTestScenarios {
         console.log(`\n=== A iniciar Cenário: ${name} ===\n`);
         console.log(`Descrição: ${config.description || 'N/A'}`);
 
-        const houseUuid = "12345";
-        const shelfId = "A1";
+        const houseUuid = CommonConfig.currentHouse;
+        const shelfId = "A1";  // Usar primeira prateleira para testes
 
-        // Componentes do sistema
         let components = {};
 
         try {
@@ -53,6 +53,8 @@ class UnifiedTestScenarios {
      * @private
      */
     static async initializeComponents(houseUuid, shelfId, config) {
+        console.log('Iniciando componentes do sistema...');
+
         const components = {
             tempSensor: new TemperatureSensor(houseUuid),
             rfidSensor: new RFIDSensor(houseUuid, shelfId),
@@ -63,28 +65,36 @@ class UnifiedTestScenarios {
 
         // Configurar sequências de teste
         if (config.temperatures) {
+            console.log('Configurando sequência de temperaturas:', config.temperatures);
             components.tempSensor.setTestTemperatures(config.temperatures);
         }
 
         if (config.rfidSequence) {
+            console.log('Configurando sequência RFID:', config.rfidSequence);
             components.rfidSensor.setTestSequence(config.rfidSequence.map(item => ({
                 rfid_tag: item.rfid_tag,
                 action: item.action,
                 shelf_id: shelfId,
-                reader_id: `RFID-${shelfId}`,
                 type: 'rfid_event',
                 timestamp: new Date().toISOString()
             })));
         }
 
         if (config.weightSequence) {
+            console.log('Configurando sequência de peso:', config.weightSequence);
             components.weightSensor.setTestSequence(config.weightSequence);
         }
 
         // Conectar todos os componentes
-        await Promise.all(Object.values(components).map(component => 
-            component.connect()
-        ));
+        try {
+            await Promise.all(Object.values(components).map(component => 
+                component.connect()
+            ));
+            console.log('Todos os componentes conectados com sucesso');
+        } catch (error) {
+            console.error('Erro ao conectar componentes:', error);
+            throw error;
+        }
 
         return components;
     }
@@ -136,10 +146,13 @@ class UnifiedTestScenarios {
      * @private
      */
     static async cleanupComponents(components) {
+        console.log('Iniciando limpeza dos componentes...');
+        
         for (const [name, component] of Object.entries(components)) {
             if (component && typeof component.cleanup === 'function') {
                 try {
                     await component.cleanup();
+                    console.log(`Componente ${name} limpo com sucesso`);
                 } catch (error) {
                     console.error(`Erro ao limpar componente ${name}:`, error);
                 }
@@ -199,8 +212,20 @@ class UnifiedTestScenarios {
                     { rfid_tag: "1234567890", action: "add" }
                 ],
                 weightSequence: [450, 1750, 2000]
+            },
+            {
+                name: "Combinado - Múltiplos Eventos",
+                description: "Testa comportamento do sistema com múltiplos eventos simultâneos",
+                temperatures: [15.0, 15.5, 15.8, 16.0],
+                rfidSequence: [
+                    { rfid_tag: "1234567890", action: "add" },
+                    { rfid_tag: "0987654321", action: "add" }
+                ],
+                weightSequence: [0, 1000, 2000, 3000]
             }
         ];
+
+        console.log('\nIniciando execução de cenários unificados...\n');
 
         for (const scenario of scenarios) {
             try {
